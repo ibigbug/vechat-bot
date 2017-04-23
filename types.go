@@ -1,0 +1,137 @@
+package vechatsync
+
+import "encoding/xml"
+
+type Request struct {
+	BaseRequest *BaseRequest
+}
+
+type BaseRequest struct {
+	DeviceID string
+	Sid      string
+	Skey     string
+	Uin      string
+}
+
+type BaseResponse struct {
+	ErrMsg string
+	Ret    int
+}
+
+type WechatFriend struct {
+	Alias            string
+	AppAccountFlag   int
+	AttrStatus       int
+	ChatRoomId       int
+	City             string
+	ContactFlag      int
+	DisplayName      string
+	EncryChatRoomId  string
+	HeadImgUrl       string
+	HideInputBarFlag int
+	IsOwner          int
+	KeyWord          string
+	MemberCount      int
+	MemberList       []*WechatFriend
+	NickName         string
+	OwnerUid         int
+	PYInitial        string
+	PYQuanPin        string
+	Province         string
+	RemarkName       string
+	RemarkPYInitial  string
+	RemarkPYQuanPin  string
+	Sex              int
+	Signature        string
+	SnsFlag          int
+	StarFriend       int
+	Statues          int
+	Uin              int
+	UniFriend        int
+	UserName         string
+	VerifyFlag       int
+}
+
+type WechatUser struct {
+	AppAccountFlag    int
+	ContactFlag       int
+	HeadImgFlag       int
+	HeadImgUrl        string
+	HideInputBarFlag  int
+	NickName          string
+	PYInitial         string
+	PYQuanPin         string
+	RemarkName        string
+	RemarkPYInitial   string
+	RemarkPYQuanPin   string
+	Sex               int
+	Signature         string
+	SnsFlag           int
+	StarFriend        int
+	Uin               int
+	UserName          string
+	VerifyFlag        int
+	WebWxPluginSwitch int
+}
+
+type InitResponse struct {
+	BaseResponse        *BaseResponse
+	ChatSet             string
+	ClickReportInterval int
+	ClientVersion       int
+	ContactList         []*WechatFriend
+	Count               int
+	GrayScale           int
+	InviteStartCount    int
+	MPSubscribeMsgCount int
+	MPSubscribeMsgList  []*struct {
+		MPArticleCount int
+		MPArticleList  []*struct {
+			Cover  string
+			Digest string
+			Title  string
+			Url    string
+		}
+		NickName string
+		Time     int
+		UserName string
+	}
+	Skey    string
+	SyncKey struct {
+		Count int
+		List  []struct {
+			Key int
+			Val int
+		}
+	}
+	SystemTime int
+	User       *WechatUser
+}
+
+type LogonResponse struct {
+	XMLName     xml.Name `xml:"error"`
+	Ret         string   `xml:"ret"`
+	Message     string   `xml:"message"`
+	Skey        string   `xml:"skey"`
+	Wxsid       string   `xml:"wxsid"`
+	Wxuin       string   `xml:"wxuin"`
+	PassTicket  string   `xml:"pass_ticket"`
+	IsGrayScale string   `xml:"isgrayscale"`
+}
+
+type WebwxSyncResponse struct {
+	AddMsgCount int
+	AddMsgList  []*struct {
+		Content      string
+		FromUserName string
+		MsgId        string
+		ToUserName   string
+	}
+	SyncKey struct {
+		Count int
+		List  []struct {
+			Key int
+			Val int
+		}
+	}
+}
