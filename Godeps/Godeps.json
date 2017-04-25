@@ -1,5 +1,81 @@
 {
 	"ImportPath": "github.com/ibigbug/vechat-bot",
 	"GoVersion": "go1.8",
-	"Deps": []
+	"GodepVersion": "v79",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/dgrijalva/jwt-go",
+			"Comment": "v3.0.0-17-g2268707",
+			"Rev": "2268707a8f0843315e2004ee4f1d021dc08baedf"
+		},
+		{
+			"ImportPath": "github.com/go-pg/pg",
+			"Comment": "v6.1.0",
+			"Rev": "fe3699c336cb7dbd24dca8ed9e0f1f3447f6b0f1"
+		},
+		{
+			"ImportPath": "github.com/go-pg/pg/internal",
+			"Comment": "v6.1.0",
+			"Rev": "fe3699c336cb7dbd24dca8ed9e0f1f3447f6b0f1"
+		},
+		{
+			"ImportPath": "github.com/go-pg/pg/internal/parser",
+			"Comment": "v6.1.0",
+			"Rev": "fe3699c336cb7dbd24dca8ed9e0f1f3447f6b0f1"
+		},
+		{
+			"ImportPath": "github.com/go-pg/pg/internal/pool",
+			"Comment": "v6.1.0",
+			"Rev": "fe3699c336cb7dbd24dca8ed9e0f1f3447f6b0f1"
+		},
+		{
+			"ImportPath": "github.com/go-pg/pg/orm",
+			"Comment": "v6.1.0",
+			"Rev": "fe3699c336cb7dbd24dca8ed9e0f1f3447f6b0f1"
+		},
+		{
+			"ImportPath": "github.com/go-pg/pg/types",
+			"Comment": "v6.1.0",
+			"Rev": "fe3699c336cb7dbd24dca8ed9e0f1f3447f6b0f1"
+		},
+		{
+			"ImportPath": "github.com/jinzhu/inflection",
+			"Rev": "1c35d901db3da928c72a72d8458480cc9ade058f"
+		},
+		{
+			"ImportPath": "github.com/skip2/go-qrcode",
+			"Rev": "0bb60b5a716144fa55da373bab578cca49a537d7"
+		},
+		{
+			"ImportPath": "github.com/skip2/go-qrcode/bitset",
+			"Rev": "0bb60b5a716144fa55da373bab578cca49a537d7"
+		},
+		{
+			"ImportPath": "github.com/skip2/go-qrcode/reedsolomon",
+			"Rev": "0bb60b5a716144fa55da373bab578cca49a537d7"
+		},
+		{
+			"ImportPath": "golang.org/x/net/context",
+			"Rev": "4971afdc2f162e82d185353533d3cf16188a9f4e"
+		},
+		{
+			"ImportPath": "golang.org/x/net/publicsuffix",
+			"Rev": "4971afdc2f162e82d185353533d3cf16188a9f4e"
+		},
+		{
+			"ImportPath": "golang.org/x/net/websocket",
+			"Rev": "4971afdc2f162e82d185353533d3cf16188a9f4e"
+		},
+		{
+			"ImportPath": "golang.org/x/oauth2",
+			"Rev": "a6bd8cefa1811bd24b86f8902872e4e8225f74c4"
+		},
+		{
+			"ImportPath": "golang.org/x/oauth2/internal",
+			"Rev": "a6bd8cefa1811bd24b86f8902872e4e8225f74c4"
+		}
+	]
 }
