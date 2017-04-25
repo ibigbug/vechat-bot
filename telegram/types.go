@@ -19,11 +19,21 @@ type UserResponse struct {
 	Result User `json:"result"`
 }
 
+type Chat struct {
+	Id   int64  `json:"id"`
+	Type string `json:"type"`
+}
 type Message struct {
 	MessageId int    `json:"message_id"`
 	From      User   `Json:"from"`
 	Date      int    `json:"date"`
 	Text      string `json:"text"`
+	Chat      Chat   `json:"chat"`
+}
+
+type SendMessage struct {
+	ChatId int64  `json:"chat_id"`
+	Text   string `json:"text"`
 }
 
 func (m Message) String() string {
@@ -31,7 +41,7 @@ func (m Message) String() string {
 }
 
 type Update struct {
-	UpdateId int     `json:"update_id"`
+	UpdateId int64   `json:"update_id"`
 	Message  Message `json:"message"`
 }
 

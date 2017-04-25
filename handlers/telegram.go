@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 
 	"strconv"
@@ -34,10 +33,9 @@ func AddTelegramBotHandler(w http.ResponseWriter, r *http.Request) {
 		AccountId: user.(models.GoogleAccount).Sub,
 	}
 	if err := models.Engine.Insert(&tgBot); err == nil {
-		fmt.Println(tgBot)
 		http.Redirect(w, r, "/", http.StatusFound)
 	} else {
-		fmt.Println(err)
+
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

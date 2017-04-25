@@ -8,8 +8,6 @@ import (
 
 	"github.com/ibigbug/vechat-bot/middlewares"
 	"github.com/ibigbug/vechat-bot/models"
-	"github.com/ibigbug/vechat-bot/wechat"
-	qrcode "github.com/skip2/go-qrcode"
 )
 
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
@@ -36,24 +34,21 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html")
 	t.Execute(w, locals)
-
 }
 
-func QRCodeHandler(w http.ResponseWriter, r *http.Request) {
-	uuid, err := wechat.GetUUID()
-	png, err := qrcode.Encode(fmt.Sprintf("https://login.weixin.qq.com/l/%s", uuid), qrcode.Medium, 256)
-	if err != nil {
-		panic(err)
+func WechatLoginPage(w http.ResponseWriter, r *http.Request) {
+	if user := r.Context().Value(middlewares.CtxKey("user")); user != nil {
+		var bot models.TelegramBot
+		if err := models.Engine.Model(&bot).Where("id = ?", r.URL.Query().Get("bot")).Select(); err != nil {
+			http.Error(w, "Sorry, not your bot", http.StatusForbidden)
+		} else {
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<p>scan QRCode using Wechat</p>`))
+			w.Write([]byte(fmt.Sprintf(`<img src="/qrcode?bot=%s" />`, bot.Name)))
+		}
+	} else {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
 	}
-	w.WriteHeader(200)
-	w.Header().Set("Content-Type", "image/png")
-	w.Write(png)
 
-	go func() {
-		wxClient := &wechat.WechatClient{}
-		wxClient.CheckLogin(uuid)
-
-		fmt.Println("Still polling.. sth wrong might happend...")
-
-	}()
 }

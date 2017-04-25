@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/ibigbug/vechat-bot/handlers"
@@ -19,24 +18,33 @@ func runServer(addr string) {
 	// index
 	mux.Handle("/", middlewares.Middleware(
 		http.HandlerFunc(handlers.IndexHandler),
-		middlewares.CurrentUser(context.Background()),
+		middlewares.CurrentUser(),
 	))
-	mux.HandleFunc("/qrcode", handlers.QRCodeHandler)
+	mux.Handle("/qrcode", middlewares.Middleware(
+		http.HandlerFunc(handlers.QRCodeHandler),
+		middlewares.CurrentUser(),
+	))
 
 	// telegram
 	mux.Handle("/telegram", middlewares.Middleware(
 		http.HandlerFunc(handlers.AddTelegramBotHandler),
-		middlewares.CurrentUser(context.Background()),
+		middlewares.CurrentUser(),
 	))
 	mux.Handle("/telegram/toggle", middlewares.Middleware(
 		http.HandlerFunc(handlers.ToggleBotStatusHandler),
-		middlewares.CurrentUser(context.Background()),
+		middlewares.CurrentUser(),
+	))
+
+	// wechat
+	mux.Handle("/wechat", middlewares.Middleware(
+		http.HandlerFunc(handlers.WechatLoginPage),
+		middlewares.CurrentUser(),
 	))
 
 	// account
 	mux.Handle("/account/login", middlewares.Middleware(
 		http.HandlerFunc(handlers.LoginPageHandler),
-		middlewares.CurrentUser(context.Background()),
+		middlewares.CurrentUser(),
 	))
 	mux.HandleFunc("/account/callback", handlers.LoginCallbackHandler)
 

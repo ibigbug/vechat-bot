@@ -2,6 +2,11 @@ package wechat
 
 import "encoding/xml"
 
+type SyncToTelegram struct {
+	FromUserName string
+	Content      string
+}
+
 type SyncKey struct {
 	Count int
 	List  []struct {
@@ -18,7 +23,7 @@ type WechatCredential struct {
 	SyncKey    SyncKey
 }
 
-type Request struct {
+type InitRequest struct {
 	BaseRequest *BaseRequest
 }
 

@@ -1,21 +1,32 @@
-<script>
-function logout() {
-  document.cookie.split(';').forEach(cookie => {
-    var eqi = cookie.indexOf('=')
-    var name = eqi > -1 ? cookie.substr(0, eqi) : cookie
-    document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT';
-  })
-  location.reload()
-}
-</script>
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Vechat Sync Bot</title>
+  <script>
+    function logout() {
+      document.cookie.split(';').forEach(cookie => {
+        var eqi = cookie.indexOf('=')
+        var name = eqi > -1 ? cookie.substr(0, eqi) : cookie
+        document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      })
+      location.reload()
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/6.0.0/normalize.min.css"></link>
+  <style>
+    form {
+      display: inline;
+    }
+  </style>
+</head>
+<body>
 {{ if not .user }}
   <a href="/account/login">Login with Google</a>
 {{ else }}
   <p>Hi, {{ .user.Email }},  <a href="#" onclick="logout()">Logout</a></p>
-
-  <img src="{{ .qrcode }}" alt="Scan to Login">
-
   <h3>My Channels</h3>
   {{ range .channels }}
     {{ . }}
@@ -33,16 +44,17 @@ function logout() {
     {{ range .tgbots }}
       <dt>{{ .Name }}</dt>
       <dd>- status: {{ .Status }}</dd>
-      <dd>- action: <form action="/telegram/toggle?id={{ .Id }}" method="POST"><button>enable</button></form></dd>
+      <dd>
+        - action:
+          <form action="/telegram/toggle?id={{ .Id }}" method="POST"><button>toggle</button></form>
+          <a href="/wechat?bot={{ .Id }}"><button>link to wechat</button></a>
+      </dd>
   {{ else }}
     No Bots. Click to create new one.
   {{ end }}
   </dl>
-
-  <h3>My Wechat Accounts</h3>
-  {{ range .wcaccounts }}
-    {{ . }}
-  {{ else }}
-    No Wechat Accounts. Click to create new one.
-  {{ end }}
 {{ end }}
+
+
+</body>
+</html>

@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"strconv"
 
 	"github.com/ibigbug/vechat-bot/models"
 )
@@ -72,6 +75,7 @@ type TelegramBot struct {
 	client     http.Client
 	Token      string
 	Name       string
+	ChatId     int64
 }
 
 func (t *TelegramBot) CancelUpdate() {
@@ -83,7 +87,7 @@ func (t *TelegramBot) CancelUpdate() {
 	t.cancelFunc = cancel
 }
 
-func (t TelegramBot) GetMe() (user User, err error) {
+func (t *TelegramBot) GetMe() (user User, err error) {
 	u, _ := url.Parse(TelegramAPIEndpoint)
 	u.Path += fmt.Sprintf("/bot%s/getMe", t.Token)
 	log.Printf("GetMe %s\n", u.String())
@@ -97,11 +101,11 @@ func (t TelegramBot) GetMe() (user User, err error) {
 	return response.Result, err
 }
 
-func (t TelegramBot) GetUpdates() {
+func (t *TelegramBot) GetUpdates() {
 	u, _ := url.Parse(TelegramAPIEndpoint)
 	u.Path += fmt.Sprintf("/bot%s/getUpdates", t.Token)
 	q := u.Query()
-	q.Set("timeout", "3")
+	q.Set("timeout", "10")
 	u.RawQuery = q.Encode()
 
 	for {
@@ -126,10 +130,31 @@ func (t TelegramBot) GetUpdates() {
 			decoder := json.NewDecoder(rv.Body)
 			var update UpdateResponse
 			decoder.Decode(&update)
-			log.Printf("Got %s messages\n", len(update.Result))
+			log.Printf("Got %d messages\n", len(update.Result))
 			for _, up := range update.Result {
-				fmt.Printf("Msg %s\n", up.Message)
+				log.Printf("Msg %s, %d\n", up.Message, up.UpdateId)
+				if up.Message.Text == "/login" {
+					log.Printf("register with chat id %d\n", up.Message.Chat.Id)
+					t.ChatId = up.Message.Chat.Id
+				}
+
+				q.Set("offset", strconv.FormatInt(up.UpdateId+1, 10))
+				u.RawQuery = q.Encode()
 			}
 		}
 	}
+}
+
+func (t *TelegramBot) SendMessage(msg SendMessage) {
+	msg.ChatId = t.ChatId
+	u, _ := url.Parse(TelegramAPIEndpoint)
+	u.Path += fmt.Sprintf("/bot%s/sendMessage", t.Token)
+	body := new(bytes.Buffer)
+	json.NewEncoder(body).Encode(msg)
+	res, err := t.client.Post(u.String(), "application/json", body)
+	if err != nil {
+		log.Println("Error send message, need to retry")
+		return
+	}
+	log.Println("Send msg to bot", res.Status)
 }

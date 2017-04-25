@@ -2,7 +2,7 @@ package middlewares
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"math/big"
 	"net/http"
 
@@ -30,7 +30,7 @@ func Middleware(h http.Handler, adapters ...Adapter) http.Handler {
 	return h
 }
 
-func CurrentUser(ctx context.Context) Adapter {
+func CurrentUser() Adapter {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if cookie, err := r.Cookie("vsync-jwt"); err == nil {
@@ -74,10 +74,10 @@ func CurrentUser(ctx context.Context) Adapter {
 					var user models.GoogleAccount
 					if err := models.Engine.Model(&user).
 						Where("email = ?", claims["email"]).Select(); err == nil {
-						r = r.WithContext(context.WithValue(ctx, CtxKey("user"), user))
+						r = r.WithContext(context.WithValue(context.Background(), CtxKey("user"), user))
 					}
 				} else {
-					fmt.Println(err)
+					log.Printf("verify token err, ok: %v, valid: %v", ok, token.Valid)
 				}
 			}
 			h.ServeHTTP(w, r)

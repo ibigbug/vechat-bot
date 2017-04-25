@@ -16,28 +16,39 @@ import (
 	"strings"
 	"time"
 
+	"errors"
+
+	"github.com/ibigbug/vechat-bot/telegram"
 	"golang.org/x/net/publicsuffix"
 )
 
 const (
-	BaseCookieURL = "https://wxq.qq.com"
-	GetUUIDURL    = "https://login.wx2.qq.com/jslogin?appid=wx782c26e4c19acffb&redirect_uri=https%3A%2F%2Fwx.qq.com%2Fcgi-bin%2Fmmwebwx-bin%2Fwebwxnewloginpage&fun=new&lang=en_US&_=1492959953169"
-	CheckLoginURL = "https://login.wx2.qq.com/cgi-bin/mmwebwx-bin/login"
-	InitURL       = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxinit"
-	SyncCheckURL  = "https://webpush.wx2.qq.com/cgi-bin/mmwebwx-bin/synccheck"
-	WebWXSyncURL  = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxsync"
+	BaseCookieURL      = "https://wxq.qq.com"
+	GetUUIDURL         = "https://login.wx2.qq.com/jslogin?appid=wx782c26e4c19acffb&redirect_uri=https%3A%2F%2Fwx.qq.com%2Fcgi-bin%2Fmmwebwx-bin%2Fwebwxnewloginpage&fun=new&lang=en_US&_=1492959953169"
+	CheckLoginURL      = "https://login.wx2.qq.com/cgi-bin/mmwebwx-bin/login"
+	InitURL            = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxinit"
+	SyncCheckURL       = "https://webpush.wx2.qq.com/cgi-bin/mmwebwx-bin/synccheck"
+	WebWXSyncURL       = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxsync"
+	WebWXGetContactURL = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxgetcontact"
+
+	SelectorNewMessage = "2"
+	SelectorNothing    = "0"
 )
 
-var UUIDMatcher = regexp.MustCompile("uuid\\s*=\\s*\"([^\"]*)\"\\s*")
-var RedirectURLMatcher = regexp.MustCompile("redirect_uri\\s*=\"([^\"]*)\"")
-var SelectorMatcher = regexp.MustCompile("selector:\"2\"")
+var (
+	UUIDMatcher        = regexp.MustCompile("uuid\\s*=\\s*\"([^\"]*)\"\\s*")
+	RedirectURLMatcher = regexp.MustCompile("redirect_uri\\s*=\"([^\"]*)\"")
+	SelectorMatcher    = regexp.MustCompile("selector:\"(\\d+)\"")
 
-func NewWechatClient(username, deviceId string, cookies []*http.Cookie, credential WechatCredential) *WechatClient {
+	NilCredential WechatCredential
+
+	CheckLoginTimeout = errors.New("Wechat CheckLogin Timeout")
+)
+
+func NewWechatClient(tgBot *telegram.TelegramBot) *WechatClient {
 	jar, _ := cookiejar.New(&cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,
 	})
-	u, _ := url.Parse(BaseCookieURL)
-	jar.SetCookies(u, cookies)
 
 	client := &http.Client{
 		Jar: jar,
@@ -49,35 +60,32 @@ func NewWechatClient(username, deviceId string, cookies []*http.Cookie, credenti
 			return http.ErrUseLastResponse
 		},
 	}
-	if deviceId == "" {
-		deviceId = genDeviceID()
-	}
+
 	return &WechatClient{
-		Client:     client,
-		Username:   username,
-		DeviceID:   deviceId,
-		Credential: credential,
+		Client:      client,
+		DeviceID:    genDeviceID(),
+		TelegramBot: tgBot,
+		msgQueue:    make(chan *SyncToTelegram, 30),
 	}
 }
 
+// Login Steps
+// 1. generate uuid
+// 2. check login
+// 3. init client
+// 	3.1 get contact list
+// 5. start sync
+// 	5.1 get message
 type WechatClient struct {
+	msgQueue chan *SyncToTelegram
+
 	Client      *http.Client
 	Username    string
 	DeviceID    string
 	Credential  WechatCredential
 	ContactList []*WechatFriend
-}
 
-func getR() string {
-	return strconv.Itoa(rand.Int())
-}
-
-func getT() string {
-	return strconv.FormatInt(time.Now().Unix(), 10)
-}
-
-func genDeviceID() string {
-	return strconv.FormatFloat(rand.Float64(), 'f', 15, 64)[2:]
+	TelegramBot *telegram.TelegramBot
 }
 
 func GetUUID() ([]byte, error) {
@@ -90,80 +98,75 @@ func GetUUID() ([]byte, error) {
 	return UUIDMatcher.FindSubmatch(txt)[1], nil
 }
 
-func (w WechatClient) CheckLogin(uuid []byte) {
+func (w *WechatClient) CheckLogin(uuid []byte) error {
 	checkLoginURL := getCheckLoinURL(uuid)
-	fmt.Println("Polling url", checkLoginURL.String())
 	signals := make(chan int)
-	select {
-	case <-signals:
-		w.InitClient()
-	case <-time.NewTicker(10 * time.Second).C:
-		log.Println("login timeout")
-	}
 
 	go func() {
 		for {
+			log.Println("Polling url", checkLoginURL.String())
 			if res, err := http.Get(checkLoginURL.String()); err != nil {
 				log.Printf("error check login %s\n", err)
-				time.Sleep(5)
-				continue
+				break
 			} else {
 				defer res.Body.Close()
 				bs, err := ioutil.ReadAll(res.Body)
 				if err != nil {
 					log.Printf("Error reading response: %s\n", err)
-					continue
+					break
 				}
-				if match, _ := regexp.Match("^window\\.code=200", bs); match {
+				if match, _ := regexp.Match("^window\\.code=201", bs); match {
+					signals <- 201
+				} else if match, _ := regexp.Match("^window\\.code=200", bs); match {
 					// get the redirect uri
 					redirectURI := string(getRedirectURI(bs))
 					log.Println("Found redirect_uri", redirectURI)
 					// login
 					if rv, err := w.Client.Get(redirectURI); err != nil {
 						log.Printf("error fetching redirectURI %s\n", err)
-						time.Sleep(5)
-						continue
+						break
 					} else {
 						defer rv.Body.Close()
 						rvbs, _ := ioutil.ReadAll(rv.Body)
 						var logonRes LogonResponse
 						if err := xml.Unmarshal(rvbs, &logonRes); err != nil {
 							log.Printf("error parsing logon response %s,response: %s\n", err, string(rvbs))
-							time.Sleep(5)
-							continue
+							break
 						}
-						fmt.Printf("%v\n", logonRes)
+						log.Printf("Got logon response, setting credentials...")
 						w.setCredential(&logonRes)
-						signals <- 1
+						signals <- 200
+						close(signals)
 						break
 					}
 				}
 			}
 		}
 	}()
+L:
+	for {
+		select {
+		case sig := <-signals:
+			if sig == 201 {
+				log.Println("Avatar loaded...")
+				continue
+			} else if sig == 200 {
+				log.Println("Check Login succeeded")
+				break L
+			}
+		case <-time.After(60 * time.Second):
+			log.Println("login timeout")
+			return CheckLoginTimeout
+		}
+	}
+	return nil
 }
 
-func (w WechatClient) setCredential(logonRes *LogonResponse) {
+func (w *WechatClient) setCredential(logonRes *LogonResponse) {
 	(&w.Credential).PassTicket = logonRes.PassTicket
 	(&w.Credential).Sid = logonRes.Wxsid
 	(&w.Credential).Skey = logonRes.Skey
 	(&w.Credential).Uin = logonRes.Wxuin
-}
-
-func getRedirectURI(raw []byte) []byte {
-	return RedirectURLMatcher.FindSubmatch(raw)[1]
-}
-
-func getCheckLoinURL(uuid []byte) *url.URL {
-	u, _ := url.Parse(CheckLoginURL)
-	q := u.Query()
-	q.Set("loginicon", "true")
-	q.Set("uuid", string(uuid))
-	q.Set("tip", "0")
-	q.Set("r", getR())
-	q.Set("_", getT())
-	u.RawQuery = q.Encode()
-	return u
 }
 
 func (w *WechatClient) InitClient() {
@@ -173,7 +176,7 @@ func (w *WechatClient) InitClient() {
 	q.Set("pass_ticket", w.Credential.PassTicket)
 	u.RawQuery = q.Encode()
 
-	request := &Request{
+	request := &InitRequest{
 		BaseRequest: &BaseRequest{
 			DeviceID: w.DeviceID,
 			Sid:      w.Credential.Sid,
@@ -192,47 +195,95 @@ func (w *WechatClient) InitClient() {
 	decoder := json.NewDecoder(res.Body)
 	var initRes InitResponse
 	decoder.Decode(&initRes)
-
 	w.Username = initRes.User.UserName
 	(&w.Credential).SyncKey = initRes.SyncKey
-	w.ContactList = initRes.ContactList
+
+	// get contact list
+	w.getContactList()
 }
 
-func (w WechatClient) StartSyncCheck() {
-
-	u, _ := url.Parse(SyncCheckURL)
+func (w *WechatClient) getContactList() {
+	u, _ := url.Parse(WebWXGetContactURL)
 	q := u.Query()
+	q.Set("lang", "en_US")
+	q.Set("pass_ticket", w.Credential.PassTicket)
 	q.Set("r", getR())
+	q.Set("seq", "0")
 	q.Set("skey", w.Credential.Skey)
-	q.Set("uin", w.Credential.Uin)
-	q.Set("deviceid", w.DeviceID)
-	q.Set("sid", w.Credential.Sid)
-
-	syncKeys := make([]string, 0)
-	for _, v := range w.Credential.SyncKey.List {
-		syncKeys = append(syncKeys, fmt.Sprintf("%d_%d", v.Key, v.Val))
-	}
-	q.Set("synckey", strings.Join(syncKeys, "|"))
-	q.Set("_", getT())
 	u.RawQuery = q.Encode()
 
-	for {
-		fmt.Println("Synccheck with", u.String())
-		if res, err := w.Client.Get(u.String()); err != nil {
-			log.Printf("error syncing for account %s， err: %s\n", w.Username, err)
-		} else {
-			defer res.Body.Close()
-			fmt.Println("Polling synccheck")
-			bs, _ := ioutil.ReadAll(res.Body)
-			selector2 := SelectorMatcher.Match(bs)
-			if selector2 {
-				w.GetNewMessage()
-			}
+	res, err := w.Client.Get(u.String())
+	if err != nil {
+		log.Printf("Error get contact list")
+		return
+	} else {
+		defer res.Body.Close()
+		var response struct {
+			BaseResponse BaseResponse
+			MemberCount  int
+			MemberList   []*WechatFriend
+		}
+		if err := json.NewDecoder(res.Body).Decode(&response); err == nil {
+			log.Printf("Got %d contacts\n", response.MemberCount)
+			w.ContactList = response.MemberList
 		}
 	}
 }
 
-func (w WechatClient) GetNewMessage() {
+func (w *WechatClient) StartSyncCheck() {
+	go w.processMsgQueue()
+	for {
+		u, _ := url.Parse(SyncCheckURL)
+		q := u.Query()
+		q.Set("r", getR())
+		q.Set("skey", w.Credential.Skey)
+		q.Set("uin", w.Credential.Uin)
+		q.Set("deviceid", w.DeviceID)
+		q.Set("sid", w.Credential.Sid)
+
+		syncKeys := make([]string, 0)
+		for _, v := range w.Credential.SyncKey.List {
+			syncKeys = append(syncKeys, fmt.Sprintf("%d_%d", v.Key, v.Val))
+		}
+		q.Set("synckey", strings.Join(syncKeys, "|"))
+		q.Set("_", getT())
+		u.RawQuery = q.Encode()
+
+		log.Println("Synccheck with", u.String())
+		if res, err := w.Client.Get(u.String()); err != nil {
+			log.Printf("error syncing for account %s， err: %s\n", w.Username, err)
+		} else {
+			bs, _ := ioutil.ReadAll(res.Body)
+			selector := SelectorMatcher.FindStringSubmatch(string(bs))[1]
+			switch selector {
+			case SelectorNewMessage:
+				log.Println("Got new message")
+				w.getNewMessage()
+			case SelectorNothing:
+				continue
+			default:
+				log.Println("Unexpected resonse, sleeping", string(bs))
+				time.Sleep(5 * time.Second)
+			}
+			res.Body.Close()
+		}
+	}
+}
+
+func (w *WechatClient) processMsgQueue() {
+	log.Println("msg queue processor working..")
+	for {
+		select {
+		case msg := <-w.msgQueue:
+			log.Println("Go msg to sync..")
+			w.TelegramBot.SendMessage(telegram.SendMessage{
+				Text: msg.FromUserName + ":" + msg.Content,
+			})
+		}
+	}
+}
+
+func (w *WechatClient) getNewMessage() {
 	u, _ := url.Parse(WebWXSyncURL)
 	q := u.Query()
 	q.Set("sid", w.Credential.Sid)
@@ -244,7 +295,7 @@ func (w WechatClient) GetNewMessage() {
 	reqBody := struct {
 		BaseRequest *BaseRequest
 		SyncKey     SyncKey
-		rr          int
+		rr          string
 	}{
 		BaseRequest: &BaseRequest{
 			Uin:      w.Credential.Uin,
@@ -253,7 +304,7 @@ func (w WechatClient) GetNewMessage() {
 			DeviceID: w.DeviceID,
 		},
 		SyncKey: w.Credential.SyncKey,
-		rr:      196602270,
+		rr:      getRR(),
 	}
 
 	body := new(bytes.Buffer)
@@ -267,14 +318,50 @@ func (w WechatClient) GetNewMessage() {
 	decoder := json.NewDecoder(res.Body)
 	var syncRes WebwxSyncResponse
 	decoder.Decode(&syncRes)
-	log.Printf("%v\n", syncRes)
 	(&w.Credential).SyncKey = syncRes.SyncKey
 
 	for _, user := range w.ContactList {
 		for _, msg := range syncRes.AddMsgList {
 			if msg.FromUserName == user.UserName {
-				fmt.Printf("Got new msg from %s, content: %s\n", user.DisplayName, msg.Content)
+				log.Printf("Got new msg from %s, content: %s\n", user.NickName, msg.Content)
+				msgToTg := &SyncToTelegram{
+					FromUserName: user.NickName,
+					Content:      msg.Content,
+				}
+				w.msgQueue <- msgToTg
 			}
 		}
 	}
+}
+
+func getR() string {
+	return strconv.Itoa(rand.Int())
+}
+
+func getT() string {
+	return strconv.FormatInt(time.Now().Unix(), 10)
+}
+
+func getRR() string {
+	return strconv.FormatInt(-^time.Now().UnixNano(), 10)[:10]
+}
+
+func genDeviceID() string {
+	return "e" + strconv.FormatFloat(rand.Float64(), 'f', 15, 64)[2:]
+}
+
+func getRedirectURI(raw []byte) []byte {
+	return RedirectURLMatcher.FindSubmatch(raw)[1]
+}
+
+func getCheckLoinURL(uuid []byte) *url.URL {
+	u, _ := url.Parse(CheckLoginURL)
+	q := u.Query()
+	q.Set("loginicon", "true")
+	q.Set("uuid", string(uuid))
+	q.Set("tip", "0")
+	q.Set("r", getR())
+	q.Set("_", getT())
+	u.RawQuery = q.Encode()
+	return u
 }

@@ -15,6 +15,6 @@ func createTable() {
 		err := models.Engine.CreateTable(t, &orm.CreateTableOptions{
 			IfNotExists: true,
 		})
-		fmt.Println(err)
+		fmt.Println("sync db error: ", err)
 	}
 }
