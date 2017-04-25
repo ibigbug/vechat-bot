@@ -18,6 +18,7 @@ import (
 
 	"errors"
 
+	"github.com/ibigbug/vechat-bot/models"
 	"github.com/ibigbug/vechat-bot/telegram"
 	"golang.org/x/net/publicsuffix"
 )
@@ -80,7 +81,7 @@ type WechatClient struct {
 	msgQueue chan *SyncToTelegram
 
 	Client      *http.Client
-	Username    string
+	NickName    string
 	DeviceID    string
 	Credential  WechatCredential
 	ContactList []*WechatFriend
@@ -195,7 +196,7 @@ func (w *WechatClient) InitClient() {
 	decoder := json.NewDecoder(res.Body)
 	var initRes InitResponse
 	decoder.Decode(&initRes)
-	w.Username = initRes.User.UserName
+	w.NickName = initRes.User.NickName
 	(&w.Credential).SyncKey = initRes.SyncKey
 
 	// get contact list
@@ -251,7 +252,7 @@ func (w *WechatClient) StartSyncCheck() {
 
 		log.Println("Synccheck with", u.String())
 		if res, err := w.Client.Get(u.String()); err != nil {
-			log.Printf("error syncing for account %s， err: %s\n", w.Username, err)
+			log.Printf("error syncing for account %s， err: %s\n", w.NickName, err)
 		} else {
 			bs, _ := ioutil.ReadAll(res.Body)
 			selector := SelectorMatcher.FindStringSubmatch(string(bs))[1]
@@ -275,10 +276,21 @@ func (w *WechatClient) processMsgQueue() {
 	for {
 		select {
 		case msg := <-w.msgQueue:
-			log.Println("Go msg to sync..")
-			w.TelegramBot.SendMessage(telegram.SendMessage{
+			log.Println("Got msg to sync..")
+			if result, err := w.TelegramBot.SendMessage(telegram.SendMessage{
 				Text: msg.FromUserName + ":" + msg.Content,
-			})
+			}); err != nil {
+				panic(err)
+			} else {
+				var record models.Message
+				if _, err := models.Engine.Model(&record).
+					Set("updated = ?", time.Now().UTC()).
+					Set("telegram_chat_id = ?", w.TelegramBot.ChatId).
+					Set("telegram_msg_id = ?", result.MessageId).
+					Where("wechat_msg_id = ?", msg.MsgId).Update(); err != nil {
+					panic(err)
+				}
+			}
 		}
 	}
 }
@@ -327,7 +339,17 @@ func (w *WechatClient) getNewMessage() {
 				msgToTg := &SyncToTelegram{
 					FromUserName: user.NickName,
 					Content:      msg.Content,
+					MsgId:        msg.MsgId,
 				}
+				var saveMsg = models.Message{
+					WechatMsgId:        msg.MsgId,
+					WechatFromUser:     msg.FromUserName,
+					WechatToUser:       msg.ToUserName,
+					WechatFromNickName: user.NickName,
+					WechatToNickName:   w.NickName,
+					Content:            msg.Content,
+				}
+				models.Engine.Model(&saveMsg).Insert()
 				w.msgQueue <- msgToTg
 			}
 		}

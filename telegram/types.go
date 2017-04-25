@@ -24,16 +24,22 @@ type Chat struct {
 	Type string `json:"type"`
 }
 type Message struct {
-	MessageId int    `json:"message_id"`
-	From      User   `Json:"from"`
-	Date      int    `json:"date"`
-	Text      string `json:"text"`
-	Chat      Chat   `json:"chat"`
+	MessageId      int      `json:"message_id"`
+	From           User     `Json:"from"`
+	Date           int      `json:"date"`
+	Text           string   `json:"text"`
+	Chat           Chat     `json:"chat"`
+	ReplyToMessage *Message `json:"reply_to_message"`
 }
 
 type SendMessage struct {
 	ChatId int64  `json:"chat_id"`
 	Text   string `json:"text"`
+}
+
+type SendMessageResponse struct {
+	BaseResponse
+	Result *Message `json:"result"`
 }
 
 func (m Message) String() string {

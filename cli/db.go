@@ -1,15 +1,18 @@
 package main
 
-import "github.com/ibigbug/vechat-bot/models"
-import "github.com/go-pg/pg/orm"
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/go-pg/pg/orm"
+	"github.com/ibigbug/vechat-bot/models"
+)
 
 func createTable() {
 	tables := []interface{}{
 		new(models.GoogleAccount),
 		new(models.TelegramBot),
 		new(models.WechatCredential),
-		new(models.ChannelBinding),
+		new(models.Message),
 	}
 	for _, t := range tables {
 		err := models.Engine.CreateTable(t, &orm.CreateTableOptions{

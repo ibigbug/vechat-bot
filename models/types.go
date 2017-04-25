@@ -49,13 +49,20 @@ func (a GoogleAccount) String() string {
 type TelegramBot struct {
 	Id        int
 	AccountId string `sql:",type:varchar(300), notnull"`
-	Name      string `sql:",type:varchar(300), notnull"`
+	Name      string `sql:",type:varchar(300), notnull, unique"`
 	Token     string `sql:",type:varchar(300), notnull"`
 	Status    int    // 1: online, 2: offline, 3: invalid
+	ChatId    int64
 
 	BaseModel
 }
 
+func (t TelegramBot) String() string {
+	return fmt.Sprintf("TelegramBot{Id: %d, Name: %s, ChatId: %d}", t.Id, t.Name, t.ChatId)
+}
+
+// TODO store credential to make
+// auto-reconnect for networking issue
 type WechatCredential struct {
 	Id        int
 	AccountId string            `sql:",type:varchar(300), notnull"`
@@ -66,12 +73,18 @@ type WechatCredential struct {
 	BaseModel
 }
 
-type ChannelBinding struct {
+type Message struct {
 	Id                 int
-	AccountId          string `sql:",type:varchar(300), notnull"`
-	TelegramBotId      int
-	WechatCredentialId int
-	Status             int // 1: enabled, 0, disable
+	WechatMsgId        string `sql:",type:varchar(300), notnull"`
+	WechatFromUser     string `sql:",type:varchar(300), notnull"`
+	WechatToUser       string `sql:",type:varchar(300), notnull"`
+	WechatFromNickName string `sql:",type:varchar(300)"`
+	WechatToNickName   string `sql:",type:varchar(300)"`
+
+	TelegramChatId int64 `sql:",notnull"`
+	TelegramMsgId  int64
+
+	Content string `sql:",type:text, notnull"`
 
 	BaseModel
 }

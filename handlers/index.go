@@ -24,10 +24,6 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if user != nil {
-		var channels []models.ChannelBinding
-		models.Engine.Model(&channels).Where("account_id = ?", user.(models.GoogleAccount).Sub).Select()
-		locals["bindings"] = channels
-
 		var tgBots []models.TelegramBot
 		models.Engine.Model(&tgBots).Where("account_id = ?", user.(models.GoogleAccount).Sub).Select()
 		locals["tgbots"] = tgBots

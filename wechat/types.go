@@ -5,6 +5,7 @@ import "encoding/xml"
 type SyncToTelegram struct {
 	FromUserName string
 	Content      string
+	MsgId        string
 }
 
 type SyncKey struct {

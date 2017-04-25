@@ -27,6 +27,7 @@ func init() {
 		log.Printf("Got %d bots to survive\n", len(bots))
 		for _, b := range bots {
 			cli := GetBotClient(b.Token, b.Name)
+			cli.ChatId = b.ChatId
 			go cli.GetUpdates()
 			log.Printf("Surived a bot %s\n", b.Name)
 		}
@@ -132,10 +133,23 @@ func (t *TelegramBot) GetUpdates() {
 			decoder.Decode(&update)
 			log.Printf("Got %d messages\n", len(update.Result))
 			for _, up := range update.Result {
-				log.Printf("Msg %s, %d\n", up.Message, up.UpdateId)
+
 				if up.Message.Text == "/login" {
 					log.Printf("register with chat id %d\n", up.Message.Chat.Id)
 					t.ChatId = up.Message.Chat.Id
+					var bot models.TelegramBot
+					models.Engine.Model(&bot).
+						Where("name = ?", t.Name).
+						Column("updated").
+						Set("chat_id = ?", t.ChatId).Update()
+				} else {
+					if replyMsg := up.Message.ReplyToMessage; replyMsg != nil {
+						var record models.Message
+						models.Engine.Model(&record).
+							Where("telegram_chat_id = ?", t.ChatId).
+							Where("telegram_msg_id = ?", replyMsg.MessageId).Select()
+						log.Printf("Got reply to %s, content %s\n", record.WechatFromNickName, up.Message.Text)
+					}
 				}
 
 				q.Set("offset", strconv.FormatInt(up.UpdateId+1, 10))
@@ -145,7 +159,7 @@ func (t *TelegramBot) GetUpdates() {
 	}
 }
 
-func (t *TelegramBot) SendMessage(msg SendMessage) {
+func (t *TelegramBot) SendMessage(msg SendMessage) (*Message, error) {
 	msg.ChatId = t.ChatId
 	u, _ := url.Parse(TelegramAPIEndpoint)
 	u.Path += fmt.Sprintf("/bot%s/sendMessage", t.Token)
@@ -154,7 +168,13 @@ func (t *TelegramBot) SendMessage(msg SendMessage) {
 	res, err := t.client.Post(u.String(), "application/json", body)
 	if err != nil {
 		log.Println("Error send message, need to retry")
-		return
+		return nil, err
 	}
+	defer res.Body.Close()
 	log.Println("Send msg to bot", res.Status)
+	var rv SendMessageResponse
+	if err := json.NewDecoder(res.Body).Decode(&rv); err != nil {
+		return nil, err
+	}
+	return rv.Result, nil
 }
