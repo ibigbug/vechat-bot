@@ -16,17 +16,21 @@ import (
 
 	"encoding/xml"
 
-	vechatsync "github.com/ibigbug/vechat-sync"
+	vechatsync "github.com/ibigbug/vechat-bot"
+	"github.com/ibigbug/vechat-bot/middlewares"
 	qrcode "github.com/skip2/go-qrcode"
 )
 
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
+
 	t, err := template.ParseFiles("templates/index.html")
 	if err != nil {
 		fmt.Println(err)
 	}
-	locals := map[string]string{
+	fmt.Println(r.Context().Value(middlewares.CtxKey("user")))
+	locals := map[string]interface{}{
 		"qrcode": "/qrcode",
+		"user":   r.Context().Value(middlewares.CtxKey("user")),
 	}
 	w.Header().Set("Content-Type", "text/html")
 	t.Execute(w, locals)
@@ -56,6 +60,7 @@ func QRCodeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		checkLoginURL := vechatsync.GetCheckLoinURL(uuid)
 		for {
+			break
 			fmt.Println("Polling url", checkLoginURL.String())
 			res, err := http.Get(checkLoginURL.String())
 

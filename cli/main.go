@@ -1,19 +1,18 @@
 package main
 
 import (
-	"net/http"
-
-	"github.com/ibigbug/vechat-sync/handlers"
+	"flag"
 )
 
 func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", handlers.IndexHandler)
-	mux.HandleFunc("/qrcode", handlers.QRCodeHandler)
+	var server = flag.String("server", DefaultAddr, "Server Listen Addr")
+	var db = flag.Bool("syncdb", false, "Syncdb")
 
-	srv := http.Server{
-		Addr:    ":3000",
-		Handler: mux,
+	flag.Parse()
+
+	if *db {
+		createTable()
+	} else {
+		runServer(*server)
 	}
-	srv.ListenAndServe()
 }
