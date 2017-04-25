@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"errors"
@@ -46,7 +47,19 @@ var (
 	CheckLoginTimeout = errors.New("Wechat CheckLogin Timeout")
 )
 
-func NewWechatClient(tgBot *telegram.TelegramBot) *WechatClient {
+var botCenter = struct {
+	sync.Mutex
+	bots map[string]*WechatClient
+}{
+	bots: make(map[string]*WechatClient),
+}
+
+func NewWechatClient(userName string) *WechatClient {
+	botCenter.Lock()
+	defer botCenter.Unlock()
+	if bot, ok := botCenter.bots[userName]; ok {
+		return bot
+	}
 	jar, _ := cookiejar.New(&cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,
 	})
@@ -63,10 +76,9 @@ func NewWechatClient(tgBot *telegram.TelegramBot) *WechatClient {
 	}
 
 	return &WechatClient{
-		Client:      client,
-		DeviceID:    genDeviceID(),
-		TelegramBot: tgBot,
-		msgQueue:    make(chan *SyncToTelegram, 30),
+		Client:   client,
+		DeviceID: genDeviceID(),
+		msgQueue: make(chan *SyncToTelegram, 30),
 	}
 }
 
@@ -153,6 +165,7 @@ L:
 				continue
 			} else if sig == 200 {
 				log.Println("Check Login succeeded")
+				w.saveCredential()
 				break L
 			}
 		case <-time.After(60 * time.Second):
@@ -168,6 +181,27 @@ func (w *WechatClient) setCredential(logonRes *LogonResponse) {
 	(&w.Credential).Sid = logonRes.Wxsid
 	(&w.Credential).Skey = logonRes.Skey
 	(&w.Credential).Uin = logonRes.Wxuin
+}
+
+func (w *WechatClient) saveCredential() {
+	var credential = new(models.WechatCredential)
+	credential.PassTicket = w.Credential.PassTicket
+	credential.Sid = w.Credential.Sid
+	credential.Skey = w.Credential.Skey
+
+	var syncKey = make([]string, w.Credential.SyncKey.Count)
+	for _, sk := range w.Credential.SyncKey.List {
+		syncKey = append(syncKey, fmt.Sprintf("%s_%s", sk.Key, sk.Val))
+	}
+	credential.SyncKey = syncKey[:w.Credential.SyncKey.Count]
+
+	u, _ := url.Parse(BaseCookieURL)
+	var cookies = make(map[string]string)
+	for _, cookie := range w.Client.Jar.Cookies(u) {
+		cookies[cookie.Name] = cookie.Value
+	}
+	credential.Cookies = cookies
+	models.Engine.Model(&credential).Insert()
 }
 
 func (w *WechatClient) InitClient() {
@@ -331,6 +365,7 @@ func (w *WechatClient) getNewMessage() {
 	var syncRes WebwxSyncResponse
 	decoder.Decode(&syncRes)
 	(&w.Credential).SyncKey = syncRes.SyncKey
+	w.saveCredential()
 
 	for _, user := range w.ContactList {
 		for _, msg := range syncRes.AddMsgList {

@@ -62,13 +62,17 @@ func (t TelegramBot) String() string {
 }
 
 // TODO store credential to make
-// auto-reconnect for networking issue
+// auto-reconnect for server restart
 type WechatCredential struct {
-	Id        int
-	AccountId string            `sql:",type:varchar(300), notnull"`
-	Username  string            `sql:",type:varchar(300), notnull"`
-	Cookies   map[string]string `sql:", notnull"`
-	Status    int               // 1: online, 2: offline, 3: invalid
+	Id         int
+	AccountId  string            `sql:",type:varchar(300), notnull"`
+	Username   string            `sql:",type:varchar(300), notnull"`
+	Cookies    map[string]string `sql:", notnull"`
+	PassTicket string            `sql:",type:varchar(300)"`
+	Sid        string            `sql:",type:varchar(300)"`
+	Skey       string            `sql:",type:varchar(300)"`
+	SyncKey    []string
+	Status     int // 1: online, 2: offline, 3: invalid
 
 	BaseModel
 }
