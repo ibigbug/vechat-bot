@@ -3,6 +3,7 @@ package middlewares
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/big"
 	"net/http"
 
@@ -36,7 +37,6 @@ func CurrentUser(ctx context.Context) Adapter {
 				token, _ := jwt.Parse(cookie.Value, func(token *jwt.Token) (interface{}, error) {
 					for _, key := range data.KeySet {
 						if token.Header["kid"] == key.Kid {
-							fmt.Println("useing", key.Kid)
 							decN, err := base64.RawURLEncoding.DecodeString(key.N)
 							if err != nil {
 								panic(err)
@@ -71,6 +71,7 @@ func CurrentUser(ctx context.Context) Adapter {
 					return nil, jwt.ErrInvalidKey
 				})
 				if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+					log.Printf("validate result %v, %v\n", ok, token.Valid)
 					r = r.WithContext(context.WithValue(ctx, CtxKey("user"), claims))
 				} else {
 					fmt.Println(err)

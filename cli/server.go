@@ -6,6 +6,7 @@ import (
 
 	"github.com/ibigbug/vechat-bot/handlers"
 	"github.com/ibigbug/vechat-bot/middlewares"
+	"golang.org/x/net/websocket"
 )
 
 const (
@@ -20,8 +21,16 @@ func runServer(addr string) {
 	))
 
 	mux.HandleFunc("/qrcode", handlers.QRCodeHandler)
-	mux.HandleFunc("/account/login", handlers.LoginPageHandler)
+
+	// account
+	mux.Handle("/account/login", middlewares.Middleware(
+		http.HandlerFunc(handlers.LoginPageHandler),
+		middlewares.CurrentUser(context.Background()),
+	))
 	mux.HandleFunc("/account/callback", handlers.LoginCallbackHandler)
+
+	// websocket
+	mux.Handle("/ws", websocket.Handler(handlers.EchoServer))
 
 	srv := http.Server{
 		Addr:    addr,

@@ -16,8 +16,10 @@ import (
 
 	"encoding/xml"
 
+	jwt "github.com/dgrijalva/jwt-go"
 	vechatsync "github.com/ibigbug/vechat-bot"
 	"github.com/ibigbug/vechat-bot/middlewares"
+	"github.com/ibigbug/vechat-bot/models"
 	qrcode "github.com/skip2/go-qrcode"
 )
 
@@ -25,12 +27,19 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 
 	t, err := template.ParseFiles("templates/index.html")
 	if err != nil {
-		fmt.Println(err)
+		panic(err)
 	}
-	fmt.Println(r.Context().Value(middlewares.CtxKey("user")))
+	user := r.Context().Value(middlewares.CtxKey("user"))
+
 	locals := map[string]interface{}{
 		"qrcode": "/qrcode",
-		"user":   r.Context().Value(middlewares.CtxKey("user")),
+		"user":   user,
+	}
+
+	if user != nil {
+		var channels []models.ChannelBinding
+		models.Engine.Model(&channels).Where("account_id = ?", user.(jwt.MapClaims)["sub"]).Select()
+		locals["bindings"] = channels
 	}
 	w.Header().Set("Content-Type", "text/html")
 	t.Execute(w, locals)

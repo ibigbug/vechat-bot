@@ -1,3 +1,28 @@
-<img src="{{ .qrcode }}" alt="Scan to Login">
-<a href="/account/login">Login with Google</a>
-{{ .user }}
+{{ if not .user }}
+  <a href="/account/login">Login with Google</a>
+{{ else }}
+  <p>Hi, {{ .user.email }},  <a href="#">Logout</a></p>
+
+  <img src="{{ .qrcode }}" alt="Scan to Login">
+
+  <h3>My Channels</h3>
+  {{ range .channels }}
+    {{ . }}
+  {{ else }}
+    No channel, for now. Click to create new one.
+  {{ end }}
+
+  <h3>My Telegram Bots</h3>
+  {{ range .tgbots }}
+    {{ . }}
+  {{ else }}
+    No Bots. Click to create new one.
+  {{ end }}
+
+  <h3>My Wechat Accounts</h3>
+  {{ range .wcaccounts }}
+    {{ . }}
+  {{ else }}
+    No Wechat Accounts. Click to create new one.
+  {{ end }}
+{{ end }}

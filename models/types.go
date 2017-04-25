@@ -21,3 +21,12 @@ type GoogleAccount struct {
 func (a GoogleAccount) String() string {
 	return fmt.Sprintf("GoogleAccount{Id: %d, Email: %s}", a.Id, a.Email)
 }
+
+type ChannelBinding struct {
+	Id               int
+	AccountId        int
+	TelegramBot      string `sql:",type:varchar(300),notnull"`
+	TelegramToken    string `sql:",type:varchar(300),notnull"`
+	WechatUsername   string `sql:",type:varchar(300),notnull"`
+	WechatCredential string `sql:",type:text,notnull"`
+}

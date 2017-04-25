@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"time"
 
@@ -11,6 +12,10 @@ import (
 
 	"github.com/go-pg/pg"
 	"golang.org/x/oauth2"
+)
+
+const (
+	UserInfoURL = "https://www.googleapis.com/oauth2/v3/userinfo"
 )
 
 var conf = &oauth2.Config{
@@ -30,11 +35,11 @@ func LoginPageHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func LoginCallbackHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := context.TODO()
 	code := r.URL.Query().Get("code")
 	tok, _ := conf.Exchange(ctx, code)
 	client := conf.Client(ctx, tok)
-	rv, err := client.Get("https://www.googleapis.com/oauth2/v3/userinfo")
+	rv, err := client.Get(UserInfoURL)
 	if err == nil {
 		defer rv.Body.Close()
 	}
@@ -48,13 +53,20 @@ func LoginCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		Where("email = ?", account.Email).
 		Select()
 
-	if err == nil {
-	} else if err == pg.ErrNoRows {
+	if err == pg.ErrNoRows {
 		account.AccessToken = tok.AccessToken
 		account.RefreshToken = tok.RefreshToken
 		models.Engine.Insert(&account)
-	} else {
+		log.Printf("insert new user: %s\n", account.Email)
+	} else if err != nil {
 		panic(err)
+	} else {
+		exist.AccessToken = tok.AccessToken
+		exist.RefreshToken = tok.RefreshToken
+		models.Engine.Model(&exist).
+			Column("access_token", "refresh_token").
+			Update()
+		log.Printf("update existed user: %s\n", exist.Email)
 	}
 
 	cookie := &http.Cookie{
