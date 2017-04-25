@@ -61,10 +61,11 @@ func NewWechatClient(username, deviceId string, cookies []*http.Cookie, credenti
 }
 
 type WechatClient struct {
-	Client     *http.Client
-	Username   string
-	DeviceID   string
-	Credential WechatCredential
+	Client      *http.Client
+	Username    string
+	DeviceID    string
+	Credential  WechatCredential
+	ContactList []*WechatFriend
 }
 
 func getR() string {
@@ -109,6 +110,10 @@ func (w WechatClient) CheckLogin(uuid []byte) {
 			} else {
 				defer res.Body.Close()
 				bs, err := ioutil.ReadAll(res.Body)
+				if err != nil {
+					log.Printf("Error reading response: %s\n", err)
+					continue
+				}
 				if match, _ := regexp.Match("^window\\.code=200", bs); match {
 					// get the redirect uri
 					redirectURI := string(getRedirectURI(bs))
@@ -161,7 +166,7 @@ func getCheckLoinURL(uuid []byte) *url.URL {
 	return u
 }
 
-func (w WechatClient) InitClient() {
+func (w *WechatClient) InitClient() {
 	u, _ := url.Parse(InitURL)
 	q := u.Query()
 	q.Set("r", getR())
@@ -190,6 +195,7 @@ func (w WechatClient) InitClient() {
 
 	w.Username = initRes.User.UserName
 	(&w.Credential).SyncKey = initRes.SyncKey
+	w.ContactList = initRes.ContactList
 }
 
 func (w WechatClient) StartSyncCheck() {
@@ -261,11 +267,10 @@ func (w WechatClient) GetNewMessage() {
 	decoder := json.NewDecoder(res.Body)
 	var syncRes WebwxSyncResponse
 	decoder.Decode(&syncRes)
-	fmt.Printf("%v\n", syncRes)
-	initRes.SyncKey = syncRes.SyncKey
+	log.Printf("%v\n", syncRes)
 	(&w.Credential).SyncKey = syncRes.SyncKey
 
-	for _, user := range initRes.ContactList {
+	for _, user := range w.ContactList {
 		for _, msg := range syncRes.AddMsgList {
 			if msg.FromUserName == user.UserName {
 				fmt.Printf("Got new msg from %s, content: %s\n", user.DisplayName, msg.Content)
