@@ -15,12 +15,23 @@ const (
 
 func runServer(addr string) {
 	mux := http.NewServeMux()
+
+	// index
 	mux.Handle("/", middlewares.Middleware(
 		http.HandlerFunc(handlers.IndexHandler),
 		middlewares.CurrentUser(context.Background()),
 	))
-
 	mux.HandleFunc("/qrcode", handlers.QRCodeHandler)
+
+	// telegram
+	mux.Handle("/telegram", middlewares.Middleware(
+		http.HandlerFunc(handlers.AddTelegramBotHandler),
+		middlewares.CurrentUser(context.Background()),
+	))
+	mux.Handle("/telegram/toggle", middlewares.Middleware(
+		http.HandlerFunc(handlers.ToggleBotStatusHandler),
+		middlewares.CurrentUser(context.Background()),
+	))
 
 	// account
 	mux.Handle("/account/login", middlewares.Middleware(

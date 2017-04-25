@@ -1,6 +1,22 @@
-package vechatsync
+package wechat
 
 import "encoding/xml"
+
+type SyncKey struct {
+	Count int
+	List  []struct {
+		Key int
+		Val int
+	}
+}
+
+type WechatCredential struct {
+	PassTicket string
+	Sid        string
+	Skey       string
+	Uin        string
+	SyncKey    SyncKey
+}
 
 type Request struct {
 	BaseRequest *BaseRequest
@@ -127,11 +143,5 @@ type WebwxSyncResponse struct {
 		MsgId        string
 		ToUserName   string
 	}
-	SyncKey struct {
-		Count int
-		List  []struct {
-			Key int
-			Val int
-		}
-	}
+	SyncKey SyncKey
 }

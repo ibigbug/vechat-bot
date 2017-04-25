@@ -3,7 +3,6 @@ package middlewares
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/big"
 	"net/http"
 
@@ -17,6 +16,7 @@ import (
 
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/ibigbug/vechat-bot/data"
+	"github.com/ibigbug/vechat-bot/models"
 )
 
 type CtxKey string
@@ -71,8 +71,11 @@ func CurrentUser(ctx context.Context) Adapter {
 					return nil, jwt.ErrInvalidKey
 				})
 				if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-					log.Printf("validate result %v, %v\n", ok, token.Valid)
-					r = r.WithContext(context.WithValue(ctx, CtxKey("user"), claims))
+					var user models.GoogleAccount
+					if err := models.Engine.Model(&user).
+						Where("email = ?", claims["email"]).Select(); err == nil {
+						r = r.WithContext(context.WithValue(ctx, CtxKey("user"), user))
+					}
 				} else {
 					fmt.Println(err)
 				}

@@ -1,7 +1,18 @@
+<script>
+function logout() {
+  document.cookie.split(';').forEach(cookie => {
+    var eqi = cookie.indexOf('=')
+    var name = eqi > -1 ? cookie.substr(0, eqi) : cookie
+    document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  })
+  location.reload()
+}
+</script>
+
 {{ if not .user }}
   <a href="/account/login">Login with Google</a>
 {{ else }}
-  <p>Hi, {{ .user.email }},  <a href="#">Logout</a></p>
+  <p>Hi, {{ .user.Email }},  <a href="#" onclick="logout()">Logout</a></p>
 
   <img src="{{ .qrcode }}" alt="Scan to Login">
 
@@ -9,15 +20,24 @@
   {{ range .channels }}
     {{ . }}
   {{ else }}
-    No channel, for now. Click to create new one.
+    No channel, for now. Create one now.
   {{ end }}
 
   <h3>My Telegram Bots</h3>
-  {{ range .tgbots }}
-    {{ . }}
+  <form action="/telegram" method="POST">
+    <input type="text" name="bot_name" placeholder="Telegram Bot Name">
+    <input type="text" name="bot_token" placeholder="Telegram Bot Token">
+    <button>Submit</button>
+  </form>
+  <dl>
+    {{ range .tgbots }}
+      <dt>{{ .Name }}</dt>
+      <dd>- status: {{ .Status }}</dd>
+      <dd>- action: <form action="/telegram/toggle?id={{ .Id }}" method="POST"><button>enable</button></form></dd>
   {{ else }}
     No Bots. Click to create new one.
   {{ end }}
+  </dl>
 
   <h3>My Wechat Accounts</h3>
   {{ range .wcaccounts }}
