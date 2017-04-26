@@ -4,8 +4,6 @@ import (
 	"log"
 )
 
-var MessageSwitcher = &messageSwitcher{}
-
 type messageSwitcher struct {
 	queue chan *Message
 
