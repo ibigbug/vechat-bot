@@ -8,6 +8,6 @@ import (
 var Engine = pg.Connect(&pg.Options{
 	User:     config.DatabaseUser,
 	Password: config.DatabasePass,
-	Addr:     config.DatabaseHost,
+	Addr:     config.DatabaseHost + ":" + config.DatabasePort,
 	Database: config.DatabaseName,
 })

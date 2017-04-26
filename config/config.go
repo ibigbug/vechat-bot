@@ -12,8 +12,9 @@ func Env(key, defaultValue string) string {
 }
 
 var (
-	DatabaseHost = Env("", "localhost")
-	DatabaseUser = Env("", "admin")
-	DatabasePass = Env("", "ali123")
-	DatabaseName = Env("", "vechat-sync-dev")
+	DatabaseHost = Env("DATABASE_HOST", "localhost")
+	DatabasePort = Env("DATABASE_PORT", "32768")
+	DatabaseUser = Env("DATABASE_USER", "admin")
+	DatabasePass = Env("DATABASE_PASS", "pass")
+	DatabaseName = Env("DATABASE_NAME", "vechat-sync-dev")
 )
