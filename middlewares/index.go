@@ -33,7 +33,7 @@ func Middleware(h http.Handler, adapters ...Adapter) http.Handler {
 func CurrentUser() Adapter {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if cookie, err := r.Cookie("vsync-jwt"); err == nil {
+			if cookie, err := r.Cookie("vsync-secure-cookie"); err == nil {
 				token, _ := jwt.Parse(cookie.Value, func(token *jwt.Token) (interface{}, error) {
 					for _, key := range data.KeySet {
 						if token.Header["kid"] == key.Kid {

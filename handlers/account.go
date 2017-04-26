@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 
 	"github.com/go-pg/pg"
+	"github.com/ibigbug/vechat-bot/config"
 	"golang.org/x/oauth2"
 )
 
@@ -26,7 +27,7 @@ var conf = &oauth2.Config{
 		AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",
 		TokenURL: "https://www.googleapis.com/oauth2/v4/token",
 	},
-	RedirectURL: "http://dev:5000/account/callback",
+	RedirectURL: config.GoogleCallbackURL,
 }
 
 func LoginPageHandler(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +71,7 @@ func LoginCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cookie := &http.Cookie{
-		Name:     "vsync-jwt",
+		Name:     "vsync-secure-cookie",
 		Value:    tok.Extra("id_token").(string),
 		HttpOnly: false,
 		Path:     "/",
