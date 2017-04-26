@@ -7,7 +7,6 @@ import (
 
 	"github.com/ibigbug/vechat-bot/middlewares"
 	"github.com/ibigbug/vechat-bot/models"
-	"github.com/ibigbug/vechat-bot/telegram"
 	"github.com/ibigbug/vechat-bot/wechat"
 	qrcode "github.com/skip2/go-qrcode"
 )
@@ -30,8 +29,8 @@ func QRCodeHandler(w http.ResponseWriter, r *http.Request) {
 			w.Write(png)
 
 			go func() {
-				tgBot := telegram.GetBotClient(bot.Token, bot.Name)
-				wxClient := wechat.NewWechatClient(tgBot)
+
+				wxClient := wechat.NewWechatClient("", bot.Name)
 				if err := wxClient.CheckLogin(uuid); err != nil {
 					if err == wechat.CheckLoginTimeout {
 						log.Println("CheckLogin timeout, goodbye")
@@ -39,10 +38,9 @@ func QRCodeHandler(w http.ResponseWriter, r *http.Request) {
 						log.Println("Error occured", err)
 					}
 					return
-				} else {
-					wxClient.InitClient()
-					wxClient.StartSyncCheck()
 				}
+				wxClient.InitClient()
+				wxClient.StartSyncCheck()
 				log.Println("Still polling.. sth wrong might happend...")
 			}()
 		}

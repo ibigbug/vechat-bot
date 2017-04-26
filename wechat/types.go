@@ -2,8 +2,10 @@ package wechat
 
 import "encoding/xml"
 
-type SyncToTelegram struct {
+// SendMessage is a wechat.SendMessage sendable
+type SendMessage struct {
 	FromUserName string
+	ToUserName   string
 	Content      string
 	MsgId        string
 }

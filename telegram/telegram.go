@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,10 +15,15 @@ import (
 	"strconv"
 
 	"github.com/ibigbug/vechat-bot/models"
+	"github.com/ibigbug/vechat-bot/queue"
 )
 
 const (
 	TelegramAPIEndpoint = "https://api.telegram.org"
+)
+
+var (
+	NoSuchTelegramBot = errors.New("No such Telegram bot")
 )
 
 func init() {
@@ -34,6 +40,10 @@ func init() {
 	} else {
 		log.Printf("error occured while surviving bots: %s\n", err.Error())
 	}
+
+	var consumer = Consumer{}
+	queue.MessageSwitcher.Register(queue.TypeTelegram, consumer)
+	consumer.Start()
 }
 
 var botCenter = struct {
@@ -43,10 +53,11 @@ var botCenter = struct {
 	bots: make(map[string]*TelegramBot),
 }
 
+// GetBotClient is global Telegram bot center
 func GetBotClient(token, name string) *TelegramBot {
 	botCenter.Lock()
 	defer botCenter.Unlock()
-	if bot, ok := botCenter.bots[token]; ok {
+	if bot, ok := botCenter.bots[name]; ok {
 		return bot
 	}
 
@@ -67,6 +78,15 @@ func GetBotClient(token, name string) *TelegramBot {
 	}
 	botCenter.bots[token] = bot
 	return bot
+}
+
+func GetBotByName(name string) (*TelegramBot, error) {
+	botCenter.Lock()
+	defer botCenter.Unlock()
+	if bot, ok := botCenter.bots[name]; ok {
+		return bot, nil
+	}
+	return nil, NoSuchTelegramBot
 }
 
 type TelegramBot struct {

@@ -20,7 +20,7 @@ import (
 	"errors"
 
 	"github.com/ibigbug/vechat-bot/models"
-	"github.com/ibigbug/vechat-bot/telegram"
+	"github.com/ibigbug/vechat-bot/queue"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -45,6 +45,7 @@ var (
 	NilCredential WechatCredential
 
 	CheckLoginTimeout = errors.New("Wechat CheckLogin Timeout")
+	NoSuchClient      = errors.New("No such wechat client")
 )
 
 var botCenter = struct {
@@ -54,7 +55,7 @@ var botCenter = struct {
 	bots: make(map[string]*WechatClient),
 }
 
-func NewWechatClient(userName string) *WechatClient {
+func NewWechatClient(userName, tgBotName string) *WechatClient {
 	botCenter.Lock()
 	defer botCenter.Unlock()
 	if bot, ok := botCenter.bots[userName]; ok {
@@ -75,11 +76,26 @@ func NewWechatClient(userName string) *WechatClient {
 		},
 	}
 
-	return &WechatClient{
+	cli := &WechatClient{
 		Client:   client,
 		DeviceID: genDeviceID(),
-		msgQueue: make(chan *SyncToTelegram, 30),
+
+		TelegramBot: tgBotName,
 	}
+
+	botCenter.bots[userName] = cli
+	return cli
+}
+
+// GetBotByUserName returns a current logged in
+// Wechat account, else error
+func GetBotByUserName(userName string) (*WechatClient, error) {
+	botCenter.Lock()
+	defer botCenter.Unlock()
+	if bot, ok := botCenter.bots[userName]; ok {
+		return bot, nil
+	}
+	return nil, NoSuchClient
 }
 
 // Login Steps
@@ -90,25 +106,14 @@ func NewWechatClient(userName string) *WechatClient {
 // 5. start sync
 // 	5.1 get message
 type WechatClient struct {
-	msgQueue chan *SyncToTelegram
-
 	Client      *http.Client
 	NickName    string
 	DeviceID    string
 	Credential  WechatCredential
 	ContactList []*WechatFriend
 
-	TelegramBot *telegram.TelegramBot
-}
-
-func GetUUID() ([]byte, error) {
-	req, err := http.Get(GetUUIDURL)
-	if err != nil {
-		return nil, err
-	}
-	defer req.Body.Close()
-	txt, _ := ioutil.ReadAll(req.Body)
-	return UUIDMatcher.FindSubmatch(txt)[1], nil
+	// unique telegram bot name
+	TelegramBot string
 }
 
 func (w *WechatClient) CheckLogin(uuid []byte) error {
@@ -251,22 +256,20 @@ func (w *WechatClient) getContactList() {
 	if err != nil {
 		log.Printf("Error get contact list")
 		return
-	} else {
-		defer res.Body.Close()
-		var response struct {
-			BaseResponse BaseResponse
-			MemberCount  int
-			MemberList   []*WechatFriend
-		}
-		if err := json.NewDecoder(res.Body).Decode(&response); err == nil {
-			log.Printf("Got %d contacts\n", response.MemberCount)
-			w.ContactList = response.MemberList
-		}
+	}
+	defer res.Body.Close()
+	var response struct {
+		BaseResponse BaseResponse
+		MemberCount  int
+		MemberList   []*WechatFriend
+	}
+	if err := json.NewDecoder(res.Body).Decode(&response); err == nil {
+		log.Printf("Got %d contacts\n", response.MemberCount)
+		w.ContactList = response.MemberList
 	}
 }
 
 func (w *WechatClient) StartSyncCheck() {
-	go w.processMsgQueue()
 	for {
 		u, _ := url.Parse(SyncCheckURL)
 		q := u.Query()
@@ -301,30 +304,6 @@ func (w *WechatClient) StartSyncCheck() {
 				time.Sleep(5 * time.Second)
 			}
 			res.Body.Close()
-		}
-	}
-}
-
-func (w *WechatClient) processMsgQueue() {
-	log.Println("msg queue processor working..")
-	for {
-		select {
-		case msg := <-w.msgQueue:
-			log.Println("Got msg to sync..")
-			if result, err := w.TelegramBot.SendMessage(telegram.SendMessage{
-				Text: msg.FromUserName + ":" + msg.Content,
-			}); err != nil {
-				panic(err)
-			} else {
-				var record models.Message
-				if _, err := models.Engine.Model(&record).
-					Set("updated = ?", time.Now().UTC()).
-					Set("telegram_chat_id = ?", w.TelegramBot.ChatId).
-					Set("telegram_msg_id = ?", result.MessageId).
-					Where("wechat_msg_id = ?", msg.MsgId).Update(); err != nil {
-					panic(err)
-				}
-			}
 		}
 	}
 }
@@ -371,11 +350,7 @@ func (w *WechatClient) getNewMessage() {
 		for _, msg := range syncRes.AddMsgList {
 			if msg.FromUserName == user.UserName {
 				log.Printf("Got new msg from %s, content: %s\n", user.NickName, msg.Content)
-				msgToTg := &SyncToTelegram{
-					FromUserName: user.NickName,
-					Content:      msg.Content,
-					MsgId:        msg.MsgId,
-				}
+
 				var saveMsg = models.Message{
 					WechatMsgId:        msg.MsgId,
 					WechatFromUser:     msg.FromUserName,
@@ -385,7 +360,13 @@ func (w *WechatClient) getNewMessage() {
 					Content:            msg.Content,
 				}
 				models.Engine.Model(&saveMsg).Insert()
-				w.msgQueue <- msgToTg
+
+				msgToTg := &queue.Message{
+					FromUser:  user.NickName,
+					Content:   msg.Content,
+					FromMsgId: msg.MsgId,
+				}
+				queue.MessageSwitcher.BroadCast(msgToTg)
 			}
 		}
 	}
@@ -421,4 +402,14 @@ func getCheckLoinURL(uuid []byte) *url.URL {
 	q.Set("_", getT())
 	u.RawQuery = q.Encode()
 	return u
+}
+
+func GetUUID() ([]byte, error) {
+	req, err := http.Get(GetUUIDURL)
+	if err != nil {
+		return nil, err
+	}
+	defer req.Body.Close()
+	txt, _ := ioutil.ReadAll(req.Body)
+	return UUIDMatcher.FindSubmatch(txt)[1], nil
 }
