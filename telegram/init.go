@@ -22,7 +22,9 @@ func init() {
 		log.Printf("error occured while surviving bots: %s\n", err.Error())
 	}
 
-	var consumer = Consumer{}
-	queue.MessageSwitcher.Register(queue.TypeTelegram, consumer)
-	consumer.Start()
+	var consumer = Consumer{
+		Queue: make(chan *queue.Message),
+	}
+	queue.MessageSwitcher.Register(queue.TypeTelegram, &consumer)
+	go consumer.Start()
 }

@@ -30,7 +30,7 @@ func QRCodeHandler(w http.ResponseWriter, r *http.Request) {
 
 			go func() {
 
-				wxClient := wechat.NewWechatClient("", bot.Name)
+				wxClient := wechat.NewWechatClient(bot.Name, user.(models.GoogleAccount).Sub)
 				if err := wxClient.CheckLogin(uuid); err != nil {
 					if err == wechat.CheckLoginTimeout {
 						log.Println("CheckLogin timeout, goodbye")
@@ -40,6 +40,8 @@ func QRCodeHandler(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				wxClient.InitClient()
+				wxClient.SaveCredential()
+				wxClient.RegisterToCenter()
 				wxClient.StartSyncCheck()
 				log.Println("Still polling.. sth wrong might happend...")
 			}()

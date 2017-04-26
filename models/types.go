@@ -74,6 +74,7 @@ type WechatCredential struct {
 	SyncKey    []string
 	Status     int // 1: online, 2: offline, 3: invalid
 
+	TelegramBot string `sql:",type:varchar(300)"`
 	BaseModel
 }
 

@@ -30,6 +30,20 @@ type InitRequest struct {
 	BaseRequest *BaseRequest
 }
 
+type requestMessage struct {
+	ClientMsgId  string
+	Content      string
+	FromUserName string
+	LocalID      string
+	ToUserName   string
+	Type         int
+}
+type SendMessageRequest struct {
+	BaseRequest *BaseRequest
+	Msg         requestMessage
+	Scene       int
+}
+
 type BaseRequest struct {
 	DeviceID string
 	Sid      string

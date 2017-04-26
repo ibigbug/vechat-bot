@@ -15,6 +15,7 @@ import (
 	"strconv"
 
 	"github.com/ibigbug/vechat-bot/models"
+	"github.com/ibigbug/vechat-bot/queue"
 )
 
 const (
@@ -55,7 +56,7 @@ func GetBotClient(token, name string) *TelegramBot {
 		Token: token,
 		Name:  name,
 	}
-	botCenter.bots[token] = bot
+	botCenter.bots[name] = bot
 	return bot
 }
 
@@ -148,6 +149,19 @@ func (t *TelegramBot) GetUpdates() {
 							Where("telegram_chat_id = ?", t.ChatId).
 							Where("telegram_msg_id = ?", replyMsg.MessageId).Select()
 						log.Printf("Got reply to %s, content %s\n", record.WechatFromNickName, up.Message.Text)
+
+						var msgToWx = &queue.Message{
+							FromType:  queue.TypeWechat,
+							FromUser:  t.Name,
+							FromMsgId: strconv.Itoa(up.Message.MessageId),
+							ToType:    queue.TypeWechat,
+							ToUser:    record.WechatToUser, // This message is send to which the wechat user friend was sen to
+							Extra: map[string]string{
+								"TargetFriend": record.WechatFromUser,
+							},
+							Content: up.Message.Text,
+						}
+						queue.MessageSwitcher.Broadcast(msgToWx)
 					}
 				}
 

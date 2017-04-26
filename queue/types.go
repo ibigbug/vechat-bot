@@ -1,5 +1,9 @@
 package queue
 
+import (
+	"fmt"
+)
+
 type MessageType int
 
 const (
@@ -17,6 +21,10 @@ type Message struct {
 	ToUser    string
 	Content   string
 	Extra     interface{}
+}
+
+func (m *Message) String() string {
+	return fmt.Sprintf("queued message: %s<%d> -> %s<%d>", m.FromUser, m.FromType, m.ToUser, m.ToType)
 }
 
 type Terminal interface {

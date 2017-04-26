@@ -32,6 +32,7 @@ const (
 	SyncCheckURL       = "https://webpush.wx2.qq.com/cgi-bin/mmwebwx-bin/synccheck"
 	WebWXSyncURL       = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxsync"
 	WebWXGetContactURL = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxgetcontact"
+	WebWXSendMsgURL    = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxsendmsg"
 
 	SelectorNewMessage = "2"
 	SelectorNothing    = "0"
@@ -55,12 +56,10 @@ var botCenter = struct {
 	bots: make(map[string]*WechatClient),
 }
 
-func NewWechatClient(userName, tgBotName string) *WechatClient {
+func NewWechatClient(tgBotName, accountId string) *WechatClient {
 	botCenter.Lock()
 	defer botCenter.Unlock()
-	if bot, ok := botCenter.bots[userName]; ok {
-		return bot
-	}
+
 	jar, _ := cookiejar.New(&cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,
 	})
@@ -80,16 +79,16 @@ func NewWechatClient(userName, tgBotName string) *WechatClient {
 		Client:   client,
 		DeviceID: genDeviceID(),
 
+		AccountId:   accountId,
 		TelegramBot: tgBotName,
 	}
 
-	botCenter.bots[userName] = cli
 	return cli
 }
 
-// GetBotByUserName returns a current logged in
+// GetByAccountId returns a current logged in
 // Wechat account, else error
-func GetBotByUserName(userName string) (*WechatClient, error) {
+func GetByUserName(userName string) (*WechatClient, error) {
 	botCenter.Lock()
 	defer botCenter.Unlock()
 	if bot, ok := botCenter.bots[userName]; ok {
@@ -108,12 +107,20 @@ func GetBotByUserName(userName string) (*WechatClient, error) {
 type WechatClient struct {
 	Client      *http.Client
 	NickName    string
+	UserName    string
 	DeviceID    string
 	Credential  WechatCredential
 	ContactList []*WechatFriend
 
+	AccountId string
 	// unique telegram bot name
 	TelegramBot string
+}
+
+func (w *WechatClient) RegisterToCenter() {
+	botCenter.Lock()
+	defer botCenter.Unlock()
+	botCenter.bots[w.UserName] = w
 }
 
 func (w *WechatClient) CheckLogin(uuid []byte) error {
@@ -170,7 +177,6 @@ L:
 				continue
 			} else if sig == 200 {
 				log.Println("Check Login succeeded")
-				w.saveCredential()
 				break L
 			}
 		case <-time.After(60 * time.Second):
@@ -188,14 +194,19 @@ func (w *WechatClient) setCredential(logonRes *LogonResponse) {
 	(&w.Credential).Uin = logonRes.Wxuin
 }
 
-func (w *WechatClient) saveCredential() {
+func (w *WechatClient) SaveCredential() {
 	var credential = new(models.WechatCredential)
 	credential.PassTicket = w.Credential.PassTicket
 	credential.Sid = w.Credential.Sid
 	credential.Skey = w.Credential.Skey
+	credential.Username = w.NickName
+	credential.AccountId = w.AccountId
+	credential.TelegramBot = w.TelegramBot
+	credential.Status = 1
 
 	var syncKey = make([]string, w.Credential.SyncKey.Count)
 	for _, sk := range w.Credential.SyncKey.List {
+		fmt.Println(sk.Key, sk.Val, "sync key")
 		syncKey = append(syncKey, fmt.Sprintf("%s_%s", sk.Key, sk.Val))
 	}
 	credential.SyncKey = syncKey[:w.Credential.SyncKey.Count]
@@ -206,7 +217,19 @@ func (w *WechatClient) saveCredential() {
 		cookies[cookie.Name] = cookie.Value
 	}
 	credential.Cookies = cookies
-	models.Engine.Model(&credential).Insert()
+	if rv, err := models.Engine.Model(&credential).Insert(); err != nil {
+		log.Println("Error saving credential:", err)
+	} else {
+		log.Println("credential saved for user", w.NickName, rv)
+	}
+}
+
+func (w *WechatClient) updateSyncKey(syncKey *SyncKey) {
+	(&w.Credential).SyncKey = *syncKey
+	var credential = new(models.WechatCredential)
+	models.Engine.Model(&credential).
+		Set("sync_key = ?", syncKey).
+		Where("sync_key = ?", syncKey).Update()
 }
 
 func (w *WechatClient) InitClient() {
@@ -236,10 +259,12 @@ func (w *WechatClient) InitClient() {
 	var initRes InitResponse
 	decoder.Decode(&initRes)
 	w.NickName = initRes.User.NickName
+	w.UserName = initRes.User.UserName
 	(&w.Credential).SyncKey = initRes.SyncKey
 
 	// get contact list
 	w.getContactList()
+
 }
 
 func (w *WechatClient) getContactList() {
@@ -308,6 +333,38 @@ func (w *WechatClient) StartSyncCheck() {
 	}
 }
 
+func (w *WechatClient) SendMessage(msg SendMessage) error {
+	log.Println("Sending msg from ", msg.FromUserName, "to", msg.ToUserName, "content", msg.Content)
+	u, _ := url.Parse(WebWXSendMsgURL)
+	q := u.Query()
+	q.Set("lang", "en_US")
+	q.Set("pass_ticket", w.Credential.PassTicket)
+	u.RawQuery = q.Encode()
+
+	id := strconv.FormatInt(time.Now().UnixNano(), 10)[:17]
+	reqBody := SendMessageRequest{
+		BaseRequest: w.getBaseRequest(),
+		Msg: requestMessage{
+			ClientMsgId:  id,
+			Content:      msg.Content,
+			FromUserName: msg.FromUserName,
+			LocalID:      id,
+			ToUserName:   msg.ToUserName,
+			Type:         1,
+		},
+		Scene: 0,
+	}
+
+	body := new(bytes.Buffer)
+	json.NewEncoder(body).Encode(reqBody)
+	res, err := w.Client.Post(u.String(), "application/json", body)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	return nil
+}
+
 func (w *WechatClient) getNewMessage() {
 	u, _ := url.Parse(WebWXSyncURL)
 	q := u.Query()
@@ -322,14 +379,9 @@ func (w *WechatClient) getNewMessage() {
 		SyncKey     SyncKey
 		rr          string
 	}{
-		BaseRequest: &BaseRequest{
-			Uin:      w.Credential.Uin,
-			Sid:      w.Credential.Sid,
-			Skey:     w.Credential.Skey,
-			DeviceID: w.DeviceID,
-		},
-		SyncKey: w.Credential.SyncKey,
-		rr:      getRR(),
+		BaseRequest: w.getBaseRequest(),
+		SyncKey:     w.Credential.SyncKey,
+		rr:          getRR(),
 	}
 
 	body := new(bytes.Buffer)
@@ -343,8 +395,7 @@ func (w *WechatClient) getNewMessage() {
 	decoder := json.NewDecoder(res.Body)
 	var syncRes WebwxSyncResponse
 	decoder.Decode(&syncRes)
-	(&w.Credential).SyncKey = syncRes.SyncKey
-	w.saveCredential()
+	w.updateSyncKey(&syncRes.SyncKey)
 
 	for _, user := range w.ContactList {
 		for _, msg := range syncRes.AddMsgList {
@@ -362,13 +413,25 @@ func (w *WechatClient) getNewMessage() {
 				models.Engine.Model(&saveMsg).Insert()
 
 				msgToTg := &queue.Message{
+					FromType:  queue.TypeWechat,
 					FromUser:  user.NickName,
+					ToType:    queue.TypeTelegram,
+					ToUser:    w.TelegramBot,
 					Content:   msg.Content,
 					FromMsgId: msg.MsgId,
 				}
-				queue.MessageSwitcher.BroadCast(msgToTg)
+				queue.MessageSwitcher.Broadcast(msgToTg)
 			}
 		}
+	}
+}
+
+func (w *WechatClient) getBaseRequest() *BaseRequest {
+	return &BaseRequest{
+		Uin:      w.Credential.Uin,
+		Sid:      w.Credential.Sid,
+		Skey:     w.Credential.Skey,
+		DeviceID: w.DeviceID,
 	}
 }
 
