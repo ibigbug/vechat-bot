@@ -2,11 +2,12 @@ package models
 
 import (
 	"github.com/go-pg/pg"
+	"github.com/ibigbug/vechat-bot/config"
 )
 
 var Engine = pg.Connect(&pg.Options{
-	User:     "admin",
-	Password: "ali123",
-	Addr:     ":32768",
-	Database: "vechat-sync-dev",
+	User:     config.DatabaseUser,
+	Password: config.DatabasePass,
+	Addr:     config.DatabaseHost,
+	Database: config.DatabaseName,
 })
