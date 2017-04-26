@@ -8,10 +8,6 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-const (
-	DefaultAddr = ":5000"
-)
-
 func runServer(addr string) {
 	mux := http.NewServeMux()
 

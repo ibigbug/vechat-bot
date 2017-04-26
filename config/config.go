@@ -12,6 +12,7 @@ func Env(key, defaultValue string) string {
 }
 
 var (
+	ServerAddr   = Env("SERVER_ADDR", ":5000")
 	DatabaseHost = Env("DATABASE_HOST", "localhost")
 	DatabasePort = Env("DATABASE_PORT", "32768")
 	DatabaseUser = Env("DATABASE_USER", "admin")
