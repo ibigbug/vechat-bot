@@ -1,5 +1,9 @@
-FROM alpine:3.5
+FROM golang:1.8
 
-ADD ./dist/cmd /bin/cmd
+ADD . /src/
+
+WORKDIR /src/
+
+RUN go install ./cmd/
 
 CMD ["cmd"]
