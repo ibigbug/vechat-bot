@@ -328,7 +328,7 @@ func (w *WechatClient) StartSyncCheck() {
 			selector := SelectorMatcher.FindStringSubmatch(string(bs))[1]
 			switch selector {
 			case SelectorNewMessage:
-				log.Println("Got new message")
+				log.Println("Wechat new message")
 				w.getNewMessage()
 			case SelectorNothing:
 				continue
@@ -407,6 +407,7 @@ func (w *WechatClient) getNewMessage() {
 
 	for _, user := range w.ContactList {
 		for _, msg := range syncRes.AddMsgList {
+			fmt.Println("from", msg.FromUserName, "to", user.UserName)
 			if msg.FromUserName == user.UserName {
 				log.Printf("Got new msg from %s, content: %s\n", user.NickName, msg.Content)
 
