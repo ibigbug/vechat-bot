@@ -1,5 +1,5 @@
 dev:
-	go run cli/*.go
+	go run cmd/*.go
 
 syncdb:
-	go run cli/*.go -syncdb
+	go run cmd/*.go -syncdb
