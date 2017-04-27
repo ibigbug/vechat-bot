@@ -40,12 +40,14 @@ func LoginCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	tok, _ := conf.Exchange(ctx, code)
 	client := conf.Client(ctx, tok)
-	rv, err := client.Get(UserInfoURL)
-	if err == nil {
-		defer rv.Body.Close()
+	res, err := client.Get(UserInfoURL)
+	if err != nil {
+		log.Println("Error getting userinfo", err)
+		http.Error(w, "Login Failed. Please try again. Error: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
-
-	decoder := json.NewDecoder(rv.Body)
+	defer res.Body.Close()
+	decoder := json.NewDecoder(res.Body)
 	var account models.GoogleAccount
 	err = decoder.Decode(&account)
 
