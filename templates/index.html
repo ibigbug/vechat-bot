@@ -27,13 +27,6 @@
   <a href="/account/login">Login with Google</a>
 {{ else }}
   <p>Hi, {{ .user.Email }},  <a href="#" onclick="logout()">Logout</a></p>
-  <h3>My Channels</h3>
-  {{ range .channels }}
-    {{ . }}
-  {{ else }}
-    No channel, for now. Create one now.
-  {{ end }}
-
   <h3>My Telegram Bots</h3>
   <form action="/telegram" method="POST">
     <input type="text" name="bot_name" placeholder="Telegram Bot Name">
@@ -50,11 +43,9 @@
           <a href="/wechat?bot={{ .Id }}"><button>link to wechat</button></a>
       </dd>
   {{ else }}
-    No Bots. Click to create new one.
+    Get a new bot from @BotFather on Telegram.
   {{ end }}
   </dl>
 {{ end }}
-
-
 </body>
 </html>
