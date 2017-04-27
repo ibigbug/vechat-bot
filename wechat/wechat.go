@@ -426,10 +426,11 @@ func (w *WechatClient) getNewMessage() {
 	w.updateSyncKey(&syncRes.SyncKey)
 
 	for _, msg := range syncRes.AddMsgList {
-
+		if msg.FromUserName == w.UserName {
+			continue
+		}
 		for _, user := range w.ContactList {
 			if msg.FromUserName == user.UserName {
-
 				logger.Printf("Got new msg from %s -> %s\n", msg.FromUserName, w.UserName)
 
 				var saveMsg = models.Message{
