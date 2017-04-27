@@ -20,6 +20,10 @@ func QRCodeHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Not your bot", http.StatusForbidden)
 		} else {
 			uuid, err := wechat.GetUUID()
+			if err != nil {
+				http.Error(w, "Failed to get UUID", http.StatusSeeOther)
+				return
+			}
 			png, err := qrcode.Encode(fmt.Sprintf("https://login.weixin.qq.com/l/%s", uuid), qrcode.Highest, 256)
 			if err != nil {
 				panic(err)

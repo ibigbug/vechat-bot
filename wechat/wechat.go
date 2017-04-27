@@ -126,43 +126,50 @@ func (w *WechatClient) RegisterToCenter() {
 func (w *WechatClient) CheckLogin(uuid []byte) error {
 	checkLoginURL := getCheckLoinURL(uuid)
 	signals := make(chan int)
+	quitSig := make(chan int, 1)
 
 	go func() {
 		for {
-			log.Println("Polling url", checkLoginURL.String())
-			if res, err := http.Get(checkLoginURL.String()); err != nil {
-				log.Printf("error check login %s\n", err)
-				break
-			} else {
-				defer res.Body.Close()
-				bs, err := ioutil.ReadAll(res.Body)
-				if err != nil {
-					log.Printf("Error reading response: %s\n", err)
+			select {
+			case <-quitSig:
+				log.Println("Received quit signal, quitting")
+				return
+			default:
+				log.Println("Polling url", checkLoginURL.String())
+				if res, err := http.Get(checkLoginURL.String()); err != nil {
+					log.Printf("error check login %s\n", err)
 					break
-				}
-				if match, _ := regexp.Match("^window\\.code=201", bs); match {
-					signals <- 201
-				} else if match, _ := regexp.Match("^window\\.code=200", bs); match {
-					// get the redirect uri
-					redirectURI := string(getRedirectURI(bs))
-					log.Println("Found redirect_uri", redirectURI)
-					// login
-					if rv, err := w.Client.Get(redirectURI); err != nil {
-						log.Printf("error fetching redirectURI %s\n", err)
+				} else {
+					defer res.Body.Close()
+					bs, err := ioutil.ReadAll(res.Body)
+					if err != nil {
+						log.Printf("Error reading response: %s\n", err)
 						break
-					} else {
-						defer rv.Body.Close()
-						rvbs, _ := ioutil.ReadAll(rv.Body)
-						var logonRes LogonResponse
-						if err := xml.Unmarshal(rvbs, &logonRes); err != nil {
-							log.Printf("error parsing logon response %s,response: %s\n", err, string(rvbs))
+					}
+					if match, _ := regexp.Match("^window\\.code=201", bs); match {
+						signals <- 201
+					} else if match, _ := regexp.Match("^window\\.code=200", bs); match {
+						// get the redirect uri
+						redirectURI := string(getRedirectURI(bs))
+						log.Println("Found redirect_uri", redirectURI)
+						// login
+						if rv, err := w.Client.Get(redirectURI); err != nil {
+							log.Printf("error fetching redirectURI %s\n", err)
+							break
+						} else {
+							defer rv.Body.Close()
+							rvbs, _ := ioutil.ReadAll(rv.Body)
+							var logonRes LogonResponse
+							if err := xml.Unmarshal(rvbs, &logonRes); err != nil {
+								log.Printf("error parsing logon response %s,response: %s\n", err, string(rvbs))
+								break
+							}
+							log.Printf("Got logon response, setting credentials...")
+							w.setCredential(&logonRes)
+							signals <- 200
+							close(signals)
 							break
 						}
-						log.Printf("Got logon response, setting credentials...")
-						w.setCredential(&logonRes)
-						signals <- 200
-						close(signals)
-						break
 					}
 				}
 			}
@@ -180,7 +187,8 @@ L:
 				break L
 			}
 		case <-time.After(60 * time.Second):
-			log.Println("login timeout")
+			log.Println("login timeout, sending quit signal")
+			quitSig <- 1
 			return CheckLoginTimeout
 		}
 	}
