@@ -126,7 +126,8 @@ func (w *WechatClient) RegisterToCenter() {
 func (w *WechatClient) CheckLogin(uuid []byte) error {
 	checkLoginURL := getCheckLoinURL(uuid)
 	signals := make(chan int)
-	quitSig := make(chan int, 1)
+	defer close(signals)
+	quitSig := make(chan int)
 
 	go func() {
 		for {
@@ -167,7 +168,6 @@ func (w *WechatClient) CheckLogin(uuid []byte) error {
 							log.Printf("Got logon response, setting credentials...")
 							w.setCredential(&logonRes)
 							signals <- 200
-							close(signals)
 							break
 						}
 					}
@@ -188,7 +188,7 @@ L:
 			}
 		case <-time.After(60 * time.Second):
 			log.Println("login timeout, sending quit signal")
-			quitSig <- 1
+			close(quitSig)
 			return CheckLoginTimeout
 		}
 	}
