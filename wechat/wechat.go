@@ -126,10 +126,10 @@ func (w *WechatClient) RegisterToCenter() {
 func (w *WechatClient) CheckLogin(uuid []byte) error {
 	checkLoginURL := getCheckLoinURL(uuid)
 	signals := make(chan int)
-	defer close(signals)
 	quitSig := make(chan int)
 
 	go func() {
+		defer close(signals)
 		for {
 			select {
 			case <-quitSig:
