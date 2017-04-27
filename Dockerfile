@@ -4,6 +4,8 @@ ADD . /src/
 
 WORKDIR /src/
 
+RUN go get -d ./cmd/
+
 RUN go install ./cmd/
 
 CMD ["cmd"]
