@@ -1,6 +1,9 @@
 package wechat
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+	"fmt"
+)
 
 // SendMessage is a wechat.SendMessage sendable
 type SendMessage struct {
@@ -16,6 +19,14 @@ type SyncKey struct {
 		Key int
 		Val int
 	}
+}
+
+func (s SyncKey) GetValue() []string {
+	var syncKey = make([]string, s.Count)
+	for _, sk := range s.List {
+		syncKey = append(syncKey, fmt.Sprintf("%d_%d", sk.Key, sk.Val))
+	}
+	return syncKey[len(syncKey)-s.Count:]
 }
 
 type WechatCredential struct {
@@ -163,6 +174,7 @@ type WebwxSyncResponse struct {
 		Content      string
 		FromUserName string
 		MsgId        string
+		NewMsgId     int64
 		ToUserName   string
 	}
 	SyncKey SyncKey

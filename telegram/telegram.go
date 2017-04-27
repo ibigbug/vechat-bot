@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
 
 	"strconv"
+
+	"io/ioutil"
 
 	"github.com/ibigbug/vechat-bot/models"
 	"github.com/ibigbug/vechat-bot/queue"
@@ -91,7 +92,7 @@ func (t *TelegramBot) CancelUpdate() {
 func (t *TelegramBot) GetMe() (user User, err error) {
 	u, _ := url.Parse(TelegramAPIEndpoint)
 	u.Path += fmt.Sprintf("/bot%s/getMe", t.Token)
-	log.Printf("GetMe %s\n", u.String())
+	logger.Printf("GetMe %s\n", u.String())
 	res, err := http.Get(u.String())
 	if err == nil {
 		defer res.Body.Close()
@@ -111,31 +112,39 @@ func (t *TelegramBot) GetUpdates() {
 
 	for {
 		req, _ := http.NewRequest("GET", u.String(), nil)
-		log.Printf("Geting updates %s\n", req.URL.String())
-		if rv, err := t.client.Do(req.WithContext(t.ctx)); err != nil {
+		logger.Printf("Polling new msg for telegram bot: %s\n", t.Name)
+		if res, err := t.client.Do(req.WithContext(t.ctx)); err != nil {
 			if uerr, ok := err.(*url.Error); ok {
 				if uerr.Temporary() || uerr.Timeout() {
-					log.Printf("Error recoverable %s\n", uerr.Error())
+					logger.Printf("Error recoverable %s\n", uerr.Error())
 					continue
 				} else if uerr.Err == context.Canceled {
-					log.Printf("Update canceld... %s\n", t.Name)
+					logger.Printf("Update canceld... %s\n", t.Name)
 					break
 				} else {
-					log.Printf("Error unrecoverable %s\n", uerr.Error())
+					logger.Printf("Error unrecoverable %s\n", uerr.Error())
 					break
 				}
 			} else {
-				log.Printf("Unknown Error: %s\n", err.Error())
+				logger.Printf("Unknown Error: %s\n", err.Error())
 			}
 		} else {
-			decoder := json.NewDecoder(rv.Body)
+			defer res.Body.Close()
 			var update UpdateResponse
-			decoder.Decode(&update)
-			log.Printf("Got %d messages\n", len(update.Result))
+			if err := json.NewDecoder(res.Body).Decode(&update); err != nil {
+				logger.Println("Error decode tg message", err)
+				continue
+			}
+			if !update.Ok {
+				if update.ErrorCode == 409 {
+					logger.Println("Error polling for bot", t.Name, "error", update.Description, "Terminating...")
+					break
+				}
+			}
 			for _, up := range update.Result {
-
+				logger.Println("Telegram bot", t.Name, "got new message")
 				if up.Message.Text == "/login" {
-					log.Printf("register with chat id %d\n", up.Message.Chat.Id)
+					logger.Printf("register with chat id %d\n", up.Message.Chat.Id)
 					t.ChatId = up.Message.Chat.Id
 					var bot models.TelegramBot
 					models.Engine.Model(&bot).
@@ -148,23 +157,22 @@ func (t *TelegramBot) GetUpdates() {
 						models.Engine.Model(&record).
 							Where("telegram_chat_id = ?", t.ChatId).
 							Where("telegram_msg_id = ?", replyMsg.MessageId).Select()
-						log.Printf("Got reply to %s, content %s\n", record.WechatFromNickName, up.Message.Text)
+						logger.Printf("Got reply to %s, content %s\n", record.WechatFromNickName, up.Message.Text)
 
 						var msgToWx = &queue.Message{
-							FromType:  queue.TypeWechat,
+							FromType:  queue.TypeTelegram,
 							FromUser:  t.Name,
 							FromMsgId: strconv.Itoa(up.Message.MessageId),
 							ToType:    queue.TypeWechat,
 							ToUser:    record.WechatToUser, // This message is send to which the wechat user friend was sen to
+							Content:   up.Message.Text,
 							Extra: map[string]string{
 								"TargetFriend": record.WechatFromUser,
 							},
-							Content: up.Message.Text,
 						}
 						queue.MessageSwitcher.Broadcast(msgToWx)
 					}
 				}
-
 				q.Set("offset", strconv.FormatInt(up.UpdateId+1, 10))
 				u.RawQuery = q.Encode()
 			}
@@ -180,14 +188,12 @@ func (t *TelegramBot) SendMessage(msg SendMessage) (*Message, error) {
 	json.NewEncoder(body).Encode(msg)
 	res, err := t.client.Post(u.String(), "application/json", body)
 	if err != nil {
-		log.Println("Error send message, need to retry")
+		logger.Println("Error send message, need to retry")
 		return nil, err
 	}
 	defer res.Body.Close()
-	log.Println("Send msg to bot", res.Status)
+	bs, _ := ioutil.ReadAll(res.Body)
 	var rv SendMessageResponse
-	if err := json.NewDecoder(res.Body).Decode(&rv); err != nil {
-		return nil, err
-	}
+	json.Unmarshal(bs, &rv)
 	return rv.Result, nil
 }

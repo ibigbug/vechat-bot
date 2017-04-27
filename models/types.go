@@ -48,9 +48,9 @@ func (a GoogleAccount) String() string {
 
 type TelegramBot struct {
 	Id        int
-	AccountId string `sql:",type:varchar(300), notnull"`
-	Name      string `sql:",type:varchar(300), notnull, unique"`
-	Token     string `sql:",type:varchar(300), notnull"`
+	AccountId string `sql:",type:varchar(300),notnull"`
+	Name      string `sql:",type:varchar(300),notnull,unique"`
+	Token     string `sql:",type:varchar(300),notnull"`
 	Status    int    // 1: online, 2: offline, 3: invalid
 	ChatId    int64
 
@@ -65,8 +65,8 @@ func (t TelegramBot) String() string {
 // auto-reconnect for server restart
 type WechatCredential struct {
 	Id         int
-	AccountId  string            `sql:",type:varchar(300), notnull"`
-	Username   string            `sql:",type:varchar(300), notnull"`
+	AccountId  string            `sql:",type:varchar(300),notnull,unique"`
+	Username   string            `sql:",type:varchar(300),notnull"`
 	Cookies    map[string]string `sql:", notnull"`
 	PassTicket string            `sql:",type:varchar(300)"`
 	Sid        string            `sql:",type:varchar(300)"`
@@ -80,16 +80,16 @@ type WechatCredential struct {
 
 type Message struct {
 	Id                 int
-	WechatMsgId        string `sql:",type:varchar(300), notnull"`
-	WechatFromUser     string `sql:",type:varchar(300), notnull"`
-	WechatToUser       string `sql:",type:varchar(300), notnull"`
+	WechatMsgId        string `sql:",type:varchar(300),notnull"`
+	WechatFromUser     string `sql:",type:varchar(300),notnull"`
+	WechatToUser       string `sql:",type:varchar(300),notnull"`
 	WechatFromNickName string `sql:",type:varchar(300)"`
 	WechatToNickName   string `sql:",type:varchar(300)"`
 
 	TelegramChatId int64 `sql:",notnull"`
 	TelegramMsgId  int64
 
-	Content string `sql:",type:text, notnull"`
+	Content string `sql:",type:text,notnull"`
 
 	BaseModel
 }

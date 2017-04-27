@@ -16,7 +16,7 @@ var (
 	GoogleCallbackURL = Env("GOOGLE_CALLBACK_URL", "http://dev:5000/account/callback")
 
 	DatabaseHost = Env("DATABASE_HOST", "localhost")
-	DatabasePort = Env("DATABASE_PORT", "32768")
+	DatabasePort = Env("DATABASE_PORT", "5432")
 	DatabaseUser = Env("DATABASE_USER", "admin")
 	DatabasePass = Env("DATABASE_PASS", "pass")
 	DatabaseName = Env("DATABASE_NAME", "vechat-sync-dev")

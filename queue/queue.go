@@ -1,9 +1,5 @@
 package queue
 
-import (
-	"log"
-)
-
 type messageSwitcher struct {
 	queue chan *Message
 
@@ -13,39 +9,39 @@ type messageSwitcher struct {
 
 func (s *messageSwitcher) Broadcast(msg *Message) {
 	s.queue <- msg
-	log.Println("Broadcasting message:", msg)
+	logger.Println("Broadcasting message:", msg)
 }
 
 func (s *messageSwitcher) Register(mt MessageType, term Terminal) {
-	log.Println("new worker registed", mt)
+	logger.Println("new worker registed, type:", mt)
 	if l, ok := s.Workers[mt]; ok {
 		s.Workers[mt] = append(l, term)
 	} else {
 		s.Workers[mt] = []Terminal{term}
 	}
-	log.Println("workers after registerd", s.Workers)
+	logger.Println("workers after registerd", s.Workers)
 }
 
 func (s *messageSwitcher) Start() {
-	log.Println("MessageSwitcher started")
+	logger.Println("MessageSwitcher started")
 	for {
 		select {
 		case msg := <-s.queue:
-			log.Println("Got new msg", msg, "workers:", s.Workers)
+			logger.Println("Got new msg", msg, "workers:", s.Workers)
 			if msg.ToType == TypeShutdown {
-				log.Println("Shutting down")
+				logger.Println("Shutting down")
 				return
 			} else if l, ok := s.Workers[msg.ToType]; ok {
 				for _, term := range l {
 					err := term.Notify(msg)
 					if err != nil {
-						log.Println("Error notify", msg)
+						logger.Println("Error notify", msg)
 					} else {
-						log.Println("Notified msg", msg)
+						logger.Println("Notified msg", msg)
 					}
 				}
 			} else {
-				log.Println("No handler for MessageType:", msg.ToType)
+				logger.Println("No handler for MessageType:", msg.ToType)
 			}
 		}
 	}

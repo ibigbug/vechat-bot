@@ -6,7 +6,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/http/cookiejar"
@@ -47,6 +46,7 @@ var (
 
 	CheckLoginTimeout = errors.New("Wechat CheckLogin Timeout")
 	NoSuchClient      = errors.New("No such wechat client")
+	SendMsgError      = errors.New("Send message error")
 )
 
 var botCenter = struct {
@@ -121,6 +121,7 @@ func (w *WechatClient) RegisterToCenter() {
 	botCenter.Lock()
 	defer botCenter.Unlock()
 	botCenter.bots[w.UserName] = w
+	logger.Println("new bot registered", w.UserName)
 }
 
 func (w *WechatClient) CheckLogin(uuid []byte) error {
@@ -133,44 +134,45 @@ func (w *WechatClient) CheckLogin(uuid []byte) error {
 		for {
 			select {
 			case <-quitSig:
-				log.Println("Received quit signal, quitting")
+				logger.Println("Received quit signal, quitting")
 				return
 			default:
-				log.Println("Polling url", checkLoginURL.String())
-				if res, err := http.Get(checkLoginURL.String()); err != nil {
-					log.Printf("error check login %s\n", err)
-					break
-				} else {
-					defer res.Body.Close()
-					bs, err := ioutil.ReadAll(res.Body)
+				logger.Println("Polling url", checkLoginURL.String())
+				res, err := http.Get(checkLoginURL.String())
+				if err != nil {
+					logger.Printf("error check login %s\n", err)
+					return
+				}
+				defer res.Body.Close()
+				bs, err := ioutil.ReadAll(res.Body)
+				if err != nil {
+					logger.Printf("Error reading response: %s\n", err)
+					return
+				}
+				if match, _ := regexp.Match("^window\\.code=201", bs); match {
+					logger.Println("match 201")
+					signals <- 201
+				} else if match, _ := regexp.Match("^window\\.code=200", bs); match {
+					logger.Println("match 200")
+					// get the redirect uri
+					redirectURI := string(getRedirectURI(bs))
+					logger.Println("Found redirect_uri", redirectURI)
+					// login
+					res, err := w.Client.Get(redirectURI)
 					if err != nil {
-						log.Printf("Error reading response: %s\n", err)
-						break
+						logger.Printf("error fetching redirectURI %s\n", err)
+						return
 					}
-					if match, _ := regexp.Match("^window\\.code=201", bs); match {
-						signals <- 201
-					} else if match, _ := regexp.Match("^window\\.code=200", bs); match {
-						// get the redirect uri
-						redirectURI := string(getRedirectURI(bs))
-						log.Println("Found redirect_uri", redirectURI)
-						// login
-						if rv, err := w.Client.Get(redirectURI); err != nil {
-							log.Printf("error fetching redirectURI %s\n", err)
-							break
-						} else {
-							defer rv.Body.Close()
-							rvbs, _ := ioutil.ReadAll(rv.Body)
-							var logonRes LogonResponse
-							if err := xml.Unmarshal(rvbs, &logonRes); err != nil {
-								log.Printf("error parsing logon response %s,response: %s\n", err, string(rvbs))
-								break
-							}
-							log.Printf("Got logon response, setting credentials...")
-							w.setCredential(&logonRes)
-							signals <- 200
-							break
-						}
+					defer res.Body.Close()
+					var logonRes LogonResponse
+					if err := xml.NewDecoder(res.Body).Decode(&logonRes); err != nil {
+						logger.Printf("error parsing logon response %s\n", err)
+						return
 					}
+					logger.Printf("Got logon response, setting credentials...")
+					w.setCredential(&logonRes)
+					signals <- 200
+					return
 				}
 			}
 		}
@@ -180,14 +182,13 @@ L:
 		select {
 		case sig := <-signals:
 			if sig == 201 {
-				log.Println("Avatar loaded...")
-				continue
+				logger.Println("Avatar loaded...")
 			} else if sig == 200 {
-				log.Println("Check Login succeeded")
+				logger.Println("Check Login succeeded")
 				break L
 			}
 		case <-time.After(60 * time.Second):
-			log.Println("login timeout, sending quit signal")
+			logger.Println("login timeout, sending quit signal")
 			close(quitSig)
 			return CheckLoginTimeout
 		}
@@ -203,41 +204,51 @@ func (w *WechatClient) setCredential(logonRes *LogonResponse) {
 }
 
 func (w *WechatClient) SaveCredential() {
-	var credential = new(models.WechatCredential)
-	credential.PassTicket = w.Credential.PassTicket
-	credential.Sid = w.Credential.Sid
-	credential.Skey = w.Credential.Skey
-	credential.Username = w.NickName
-	credential.AccountId = w.AccountId
-	credential.TelegramBot = w.TelegramBot
-	credential.Status = 1
-
-	var syncKey = make([]string, w.Credential.SyncKey.Count)
-	for _, sk := range w.Credential.SyncKey.List {
-		fmt.Println(sk.Key, sk.Val, "sync key")
-		syncKey = append(syncKey, fmt.Sprintf("%s_%s", sk.Key, sk.Val))
+	var credential = models.WechatCredential{
+		AccountId: w.AccountId,
 	}
-	credential.SyncKey = syncKey[:w.Credential.SyncKey.Count]
 
 	u, _ := url.Parse(BaseCookieURL)
 	var cookies = make(map[string]string)
 	for _, cookie := range w.Client.Jar.Cookies(u) {
 		cookies[cookie.Name] = cookie.Value
 	}
-	credential.Cookies = cookies
-	if rv, err := models.Engine.Model(&credential).Insert(); err != nil {
-		log.Println("Error saving credential:", err)
+
+	if _, err := models.Engine.Model(&credential).
+		Where("account_id = ?account_id").
+		Set("pass_ticket = ?", w.Credential.PassTicket).
+		Set("sid = ?", w.Credential.Sid).
+		Set("skey = ?", w.Credential.Skey).
+		Set("username = ?", w.UserName).
+		Set("telegram_bot = ?", w.TelegramBot).
+		Set("status = ?", 1).
+		Set("sync_key = ?", w.Credential.SyncKey.GetValue()).
+		Set("cookies = ?", cookies).
+		Set("updated = ?", time.Now().UTC()).SelectOrInsert(); err != nil {
+		logger.Println("Error saving creadentials for wechat:", w.NickName, err)
+
 	} else {
-		log.Println("credential saved for user", w.NickName, rv)
+		credential.PassTicket = w.Credential.PassTicket
+		credential.Sid = w.Credential.Sid
+		credential.Skey = w.Credential.Skey
+		credential.Username = w.UserName
+		credential.TelegramBot = w.TelegramBot
+		credential.Status = 1
+		credential.SyncKey = w.Credential.SyncKey.GetValue()
+		credential.Cookies = cookies
+		credential.Updated = time.Now().UTC()
+		if err := models.Engine.Update(&credential); err != nil {
+			logger.Println("Error update existed credential for wechat: ", w.NickName, err)
+		}
 	}
 }
 
 func (w *WechatClient) updateSyncKey(syncKey *SyncKey) {
-	(&w.Credential).SyncKey = *syncKey
 	var credential = new(models.WechatCredential)
 	models.Engine.Model(&credential).
-		Set("sync_key = ?", syncKey).
-		Where("sync_key = ?", syncKey).Update()
+		Set("sync_key = ?", w.Credential.SyncKey.GetValue()).
+		Where("sync_key = ?", syncKey.GetValue()).Update()
+	(&w.Credential).SyncKey = *syncKey
 }
 
 func (w *WechatClient) InitClient() {
@@ -259,7 +270,7 @@ func (w *WechatClient) InitClient() {
 	json.NewEncoder(body).Encode(request)
 	res, err := w.Client.Post(u.String(), "application/json", body)
 	if err != nil {
-		log.Printf("Error init client %s\n", err)
+		logger.Printf("Error init client %s\n", err)
 		return
 	}
 	defer res.Body.Close()
@@ -287,7 +298,7 @@ func (w *WechatClient) getContactList() {
 
 	res, err := w.Client.Get(u.String())
 	if err != nil {
-		log.Printf("Error get contact list")
+		logger.Printf("Error get contact list")
 		return
 	}
 	defer res.Body.Close()
@@ -297,7 +308,7 @@ func (w *WechatClient) getContactList() {
 		MemberList   []*WechatFriend
 	}
 	if err := json.NewDecoder(res.Body).Decode(&response); err == nil {
-		log.Printf("Got %d contacts\n", response.MemberCount)
+		logger.Printf("Got %d contacts\n", response.MemberCount)
 		w.ContactList = response.MemberList
 	}
 }
@@ -320,20 +331,20 @@ func (w *WechatClient) StartSyncCheck() {
 		q.Set("_", getT())
 		u.RawQuery = q.Encode()
 
-		log.Println("Synccheck with", u.String())
+		logger.Println("Polling new msg for wechat client:", w.UserName)
 		if res, err := w.Client.Get(u.String()); err != nil {
-			log.Printf("error syncing for account %s， err: %s\n", w.NickName, err)
+			logger.Printf("error syncing for account %s， err: %s\n", w.NickName, err)
 		} else {
 			bs, _ := ioutil.ReadAll(res.Body)
 			selector := SelectorMatcher.FindStringSubmatch(string(bs))[1]
 			switch selector {
 			case SelectorNewMessage:
-				log.Println("Wechat new message")
+				logger.Println("Got wechat new message")
 				w.getNewMessage()
 			case SelectorNothing:
 				continue
 			default:
-				log.Println("Unexpected resonse, sleeping", string(bs))
+				logger.Println("Unexpected resonse, sleeping", string(bs))
 				time.Sleep(5 * time.Second)
 			}
 			res.Body.Close()
@@ -342,7 +353,7 @@ func (w *WechatClient) StartSyncCheck() {
 }
 
 func (w *WechatClient) SendMessage(msg SendMessage) error {
-	log.Println("Sending msg from ", msg.FromUserName, "to", msg.ToUserName, "content", msg.Content)
+	logger.Println("Sending msg from ", msg.FromUserName, "to", msg.ToUserName, "content", msg.Content[:10])
 	u, _ := url.Parse(WebWXSendMsgURL)
 	q := u.Query()
 	q.Set("lang", "en_US")
@@ -370,6 +381,15 @@ func (w *WechatClient) SendMessage(msg SendMessage) error {
 		return err
 	}
 	defer res.Body.Close()
+	var sendResponse struct {
+		BaseResponse BaseResponse
+		MsgID        string
+	}
+	json.NewDecoder(res.Body).Decode(&sendResponse)
+	if sendResponse.MsgID == "" {
+		logger.Println("Error sending wx msg")
+		return SendMsgError
+	}
 	return nil
 }
 
@@ -396,26 +416,27 @@ func (w *WechatClient) getNewMessage() {
 	json.NewEncoder(body).Encode(reqBody)
 	res, err := w.Client.Post(u.String(), "application/json", body)
 	if err != nil {
-		log.Printf("error get new message %s\n", err)
+		logger.Printf("error get new message %s\n", err)
 		return
 	}
 	defer res.Body.Close()
-	decoder := json.NewDecoder(res.Body)
+	bs, _ := ioutil.ReadAll(res.Body)
 	var syncRes WebwxSyncResponse
-	decoder.Decode(&syncRes)
+	json.Unmarshal(bs, &syncRes)
 	w.updateSyncKey(&syncRes.SyncKey)
 
-	for _, user := range w.ContactList {
-		for _, msg := range syncRes.AddMsgList {
-			fmt.Println("from", msg.FromUserName, "to", user.UserName)
+	for _, msg := range syncRes.AddMsgList {
+
+		for _, user := range w.ContactList {
 			if msg.FromUserName == user.UserName {
-				log.Printf("Got new msg from %s, content: %s\n", user.NickName, msg.Content)
+
+				logger.Printf("Got new msg from %s -> %s\n", msg.FromUserName, w.UserName)
 
 				var saveMsg = models.Message{
 					WechatMsgId:        msg.MsgId,
 					WechatFromUser:     msg.FromUserName,
-					WechatToUser:       msg.ToUserName,
 					WechatFromNickName: user.NickName,
+					WechatToUser:       w.UserName,
 					WechatToNickName:   w.NickName,
 					Content:            msg.Content,
 				}

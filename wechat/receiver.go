@@ -1,13 +1,17 @@
 package wechat
 
 import (
-	"log"
+	"fmt"
 
 	"github.com/ibigbug/vechat-bot/queue"
 )
 
 type Consumer struct {
 	Queue chan *queue.Message
+}
+
+func (c Consumer) String() string {
+	return fmt.Sprintf("Wechat Consumer %p", &c)
 }
 
 func (c Consumer) Notify(msg *queue.Message) error {
@@ -19,13 +23,13 @@ func (c *Consumer) Start() {
 	for {
 		select {
 		case msg := <-c.Queue:
-			log.Println("wx consumer got new message", msg)
+			logger.Println("wx consumer got new message", msg)
 			if msg.ToType == queue.TypeShutdown {
-				log.Println("wx queue shutdown")
+				logger.Println("wx queue shutdown")
 			} else {
 				bot, err := GetByUserName(msg.ToUser)
 				if err != nil {
-					log.Println("Error getting bot", msg.ToUser, "error", err, "msg", msg)
+					logger.Println("Error getting bot", msg.ToUser, "error", err, "msg", msg)
 				} else {
 
 					err := bot.SendMessage(SendMessage{
@@ -34,7 +38,7 @@ func (c *Consumer) Start() {
 						Content:      msg.FromUser + ": " + msg.Content,
 					})
 					if err != nil {
-						log.Println("Error sending msg", msg, "need retry")
+						logger.Println("Error sending msg", msg, "need retry")
 						continue
 					}
 				}

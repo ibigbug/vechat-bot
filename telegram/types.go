@@ -6,7 +6,9 @@ import (
 )
 
 type BaseResponse struct {
-	Ok bool `json:"ok"`
+	Ok          bool   `json:"ok"`
+	ErrorCode   int    `json:"error_code"`
+	Description string `json:"description"`
 }
 type User struct {
 	Id        int    `json:"id"`
