@@ -39,8 +39,8 @@ func WechatLoginPage(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Sorry, not your bot", http.StatusForbidden)
 		} else {
 			w.Header().Set("Content-Type", "text/html")
-			w.Write([]byte(`<p>Scan QRCode using Wechat</p>`))
-			w.Write([]byte("<small>Refresh if QRCode failed to load</small>"))
+			w.Write([]byte(`<h3>Scan QRCode using Wechat</h3>`))
+			w.Write([]byte("<p>QRCode is available in 20s(<small>Refresh if QRCode failed to load</small>).</p>"))
 			w.Write([]byte(fmt.Sprintf(`<img src="/qrcode?bot=%s" />`, bot.Name)))
 		}
 	} else {
