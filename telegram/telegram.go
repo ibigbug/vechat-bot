@@ -80,6 +80,10 @@ type TelegramBot struct {
 	ChatId     int64
 }
 
+func (t *TelegramBot) String() string {
+	return fmt.Sprintf("TelegramBot{Name: %s, ptr: %p}", t.Name, t)
+}
+
 func (t *TelegramBot) CancelUpdate() {
 	t.Lock()
 	defer t.Unlock()
@@ -105,6 +109,7 @@ func (t *TelegramBot) GetMe() (user User, err error) {
 
 func (t *TelegramBot) SetDisable() {
 	models.Engine.Model(&models.TelegramBot{}).Where("name = ?", t.Name).Set("status = ?", 0).Update()
+	logger.Println("Setting bot", t, "status to 0")
 }
 
 func (t *TelegramBot) GetUpdates() {
@@ -116,14 +121,14 @@ func (t *TelegramBot) GetUpdates() {
 
 	for {
 		req, _ := http.NewRequest("GET", u.String(), nil)
-		logger.Printf("Polling new msg for telegram bot: %s\n", t.Name)
+		logger.Printf("Polling new msg for telegram bot: %s\n", t)
 		if res, err := t.client.Do(req.WithContext(t.ctx)); err != nil {
 			if uerr, ok := err.(*url.Error); ok {
 				if uerr.Temporary() || uerr.Timeout() {
 					logger.Printf("Error recoverable %s\n", uerr.Error())
 					continue
 				} else if uerr.Err == context.Canceled {
-					logger.Printf("Update canceld... %s\n", t.Name)
+					logger.Printf("Update canceld... %s\n", t)
 					break
 				} else {
 					logger.Printf("Error unrecoverable %s\n", uerr.Error())
@@ -136,18 +141,18 @@ func (t *TelegramBot) GetUpdates() {
 			defer res.Body.Close()
 			var update UpdateResponse
 			if err := json.NewDecoder(res.Body).Decode(&update); err != nil {
-				logger.Println("Error decode tg message", err)
+				logger.Println("Error decode tg message", err, t)
 				continue
 			}
 			if !update.Ok {
 				if update.ErrorCode == 409 {
-					logger.Println("Error polling for bot", t.Name, "error", update.Description, "Terminating...")
+					logger.Println("Error polling for bot", t, "error", update.Description, "Terminating...")
+					t.SetDisable()
 					break
-					w.SetDisable()
 				}
 			}
 			for _, up := range update.Result {
-				logger.Println("Telegram bot", t.Name, "got new message")
+				logger.Println("Telegram bot", t, "got new message")
 				if up.Message.Text == "/login" {
 					logger.Printf("register with chat id %d\n", up.Message.Chat.Id)
 					t.ChatId = up.Message.Chat.Id
@@ -193,7 +198,7 @@ func (t *TelegramBot) SendMessage(msg SendMessage) (*Message, error) {
 	json.NewEncoder(body).Encode(msg)
 	res, err := t.client.Post(u.String(), "application/json", body)
 	if err != nil {
-		logger.Println("Error send message, need to retry", err)
+		logger.Println("Error send message, need to retry", err, t)
 		return nil, err
 	}
 	defer res.Body.Close()
