@@ -312,6 +312,8 @@ func (w *WechatClient) InitClient() {
 	decoder := json.NewDecoder(res.Body)
 	var initRes InitResponse
 	decoder.Decode(&initRes)
+
+	// TODO check init success
 	w.NickName = initRes.User.NickName
 	w.UserName = initRes.User.UserName
 	(&w.Credential).SyncKey = initRes.SyncKey
