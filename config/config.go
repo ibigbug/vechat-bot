@@ -20,4 +20,6 @@ var (
 	DatabaseUser = Env("DATABASE_USER", "admin")
 	DatabasePass = Env("DATABASE_PASS", "pass")
 	DatabaseName = Env("DATABASE_NAME", "vechat-sync-dev")
+
+	SentryDSN = Env("SENTRY_DSN", "")
 )
