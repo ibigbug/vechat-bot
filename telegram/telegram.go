@@ -107,7 +107,7 @@ func (t *TelegramBot) GetUpdates() {
 	u, _ := url.Parse(TelegramAPIEndpoint)
 	u.Path += fmt.Sprintf("/bot%s/getUpdates", t.Token)
 	q := u.Query()
-	q.Set("timeout", "10")
+	q.Set("timeout", "30")
 	u.RawQuery = q.Encode()
 
 	for {
@@ -188,7 +188,7 @@ func (t *TelegramBot) SendMessage(msg SendMessage) (*Message, error) {
 	json.NewEncoder(body).Encode(msg)
 	res, err := t.client.Post(u.String(), "application/json", body)
 	if err != nil {
-		logger.Println("Error send message, need to retry")
+		logger.Println("Error send message, need to retry", err)
 		return nil, err
 	}
 	defer res.Body.Close()

@@ -33,11 +33,7 @@ func QRCodeHandler(w http.ResponseWriter, r *http.Request) {
 			w.Write(png)
 
 			go func() {
-				if oldClient, err := wechat.GetByTelegramBot(bot.Name); err == nil {
-					log.Println("cancelling old wechat client for tgBot", bot.Name)
-					oldClient.CancelSynCheck()
-					oldClient.Destroy()
-				}
+
 				wxClient := wechat.NewWechatClient(bot.Name, user.(models.GoogleAccount).Sub)
 				if err := wxClient.CheckLogin(uuid); err != nil {
 					if err == wechat.CheckLoginTimeout {
@@ -47,6 +43,12 @@ func QRCodeHandler(w http.ResponseWriter, r *http.Request) {
 					}
 					return
 				}
+
+				if oldClient, err := wechat.GetByTelegramBot(bot.Name); err == nil {
+					log.Println("cancelling old wechat client", oldClient)
+					oldClient.CancelSynCheck()
+				}
+
 				wxClient.InitClient()
 				wxClient.SaveCredential()
 				wxClient.RegisterToCenter()

@@ -34,6 +34,7 @@ const (
 	WebWXGetContactURL = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxgetcontact"
 	WebWXSendMsgURL    = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxsendmsg"
 
+	RetCodeOK          = "0"
 	SelectorNewMessage = "2"
 	SelectorNothing    = "0"
 )
@@ -41,6 +42,7 @@ const (
 var (
 	UUIDMatcher        = regexp.MustCompile("uuid\\s*=\\s*\"([^\"]*)\"\\s*")
 	RedirectURLMatcher = regexp.MustCompile("redirect_uri\\s*=\"([^\"]*)\"")
+	RetcodeMatcher     = regexp.MustCompile("retcode:\"(\\d+)\"")
 	SelectorMatcher    = regexp.MustCompile("selector:\"(\\d+)\"")
 
 	NilCredential WechatCredential
@@ -70,7 +72,7 @@ func NewWechatClient(tgBotName, accountId string) *WechatClient {
 		Transport: &http.Transport{
 			IdleConnTimeout: 3 * time.Second,
 		},
-		Timeout: 0,
+		//Timeout: 0,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -106,7 +108,8 @@ func GetByUserName(userName string) (*WechatClient, error) {
 func GetByTelegramBot(tgBot string) (*WechatClient, error) {
 	botCenter.Lock()
 	defer botCenter.Unlock()
-	for _, bot := range botCenter.bots {
+	for u, bot := range botCenter.bots {
+		logger.Println(u, bot)
 		if bot.TelegramBot != "" && bot.TelegramBot == tgBot {
 			return bot, nil
 		}
@@ -138,6 +141,10 @@ type WechatClient struct {
 	cancelFunc context.CancelFunc
 }
 
+func (w *WechatClient) String() string {
+	return fmt.Sprintf("WechatClient{NickName: %s, ptr: %p, TelegramBot: %s}", w.NickName, w, w.TelegramBot)
+}
+
 func (w *WechatClient) RegisterToCenter() {
 	botCenter.Lock()
 	defer botCenter.Unlock()
@@ -148,7 +155,7 @@ func (w *WechatClient) RegisterToCenter() {
 func (w *WechatClient) Destroy() {
 	botCenter.Lock()
 	defer botCenter.Unlock()
-	botCenter.bots[w.UserName] = nil
+	delete(botCenter.bots, w.UserName)
 	logger.Println("wechat bot", w.UserName, "destroyed")
 }
 
@@ -315,6 +322,7 @@ func (w *WechatClient) InitClient() {
 }
 
 func (w *WechatClient) getContactList() {
+	logger.Println("Getting cantacts for", w)
 	u, _ := url.Parse(WebWXGetContactURL)
 	q := u.Query()
 	q.Set("lang", "en_US")
@@ -342,6 +350,7 @@ func (w *WechatClient) getContactList() {
 }
 
 func (w *WechatClient) CancelSynCheck() {
+	logger.Println("cancelling bot", w)
 	w.Lock()
 	defer w.Unlock()
 	w.cancelFunc()
@@ -351,57 +360,69 @@ func (w *WechatClient) CancelSynCheck() {
 }
 
 func (w *WechatClient) StartSyncCheck() {
+	logger.Println("Polling new msg for wechat client:", w)
+
+	u, _ := url.Parse(SyncCheckURL)
+	q := u.Query()
+	q.Set("r", getR())
+	q.Set("skey", w.Credential.Skey)
+	q.Set("uin", w.Credential.Uin)
+	q.Set("deviceid", w.DeviceID)
+	q.Set("sid", w.Credential.Sid)
+	q.Set("_", getT())
+
 	for {
-		u, _ := url.Parse(SyncCheckURL)
-		q := u.Query()
-		q.Set("r", getR())
-		q.Set("skey", w.Credential.Skey)
-		q.Set("uin", w.Credential.Uin)
-		q.Set("deviceid", w.DeviceID)
-		q.Set("sid", w.Credential.Sid)
-
-		syncKeys := make([]string, 0)
-		for _, v := range w.Credential.SyncKey.List {
-			syncKeys = append(syncKeys, fmt.Sprintf("%d_%d", v.Key, v.Val))
-		}
-		q.Set("synckey", strings.Join(syncKeys, "|"))
-		q.Set("_", getT())
+		q.Set("synckey", strings.Join(w.Credential.SyncKey.GetValue(), "|"))
 		u.RawQuery = q.Encode()
-
-		logger.Println("Polling new msg for wechat client:", w.UserName)
 		req, _ := http.NewRequest("GET", u.String(), nil)
-		if res, err := w.Client.Do(req.WithContext(w.ctx)); err != nil {
+		res, err := w.Client.Do(req.WithContext(w.ctx))
+		if err != nil {
 			if uerr, ok := err.(*url.Error); ok {
+				logger.Println(uerr)
 				if uerr.Temporary() || uerr.Timeout() {
 					logger.Printf("Error recoverable %s\n", uerr.Error())
 					time.Sleep(5 * time.Second)
 					continue
 				} else if uerr.Err == context.Canceled {
-					logger.Printf("Update canceld... %s\n", w.NickName)
-					break
+					logger.Printf("Update canceld... %s\n", w)
+					w.Destroy()
+					return
 				} else {
 					logger.Printf("Error unrecoverable %s\n", uerr.Error())
-					break
+					w.Destroy()
+					return
 				}
 			} else {
-				logger.Printf("error syncing for account %s， err: %s\n", w.NickName, err)
+				logger.Printf("error syncing for account %s， err: %s\n", w, err)
+				return
 			}
-		} else {
-			bs, _ := ioutil.ReadAll(res.Body)
-			selector := SelectorMatcher.FindStringSubmatch(string(bs))[1]
-			switch selector {
-			case SelectorNewMessage:
-				logger.Println("Got wechat new message")
-				w.getNewMessage()
-			case SelectorNothing:
-				time.Sleep(5 * time.Second)
-				continue
-			default:
-				logger.Println("Unexpected resonse, sleeping", string(bs))
-				time.Sleep(5 * time.Second)
-			}
-			res.Body.Close()
 		}
+
+		bs, _ := ioutil.ReadAll(res.Body)
+		selector, err := getSelector(bs)
+		if err != nil {
+			logger.Println("Error get synccheck result", err, w)
+			time.Sleep(10)
+			continue
+		}
+		if selector.retcode != "0" {
+			logger.Println("Synccheck over, exit now")
+			return
+		}
+		switch selector.selector {
+		case SelectorNewMessage:
+			logger.Println("Got wechat new message", w)
+			w.getNewMessage()
+		case SelectorNothing:
+			logger.Println("Found nothing, still polling", w, string(bs))
+			res.Body.Close()
+			continue
+		default:
+			logger.Println("Unexpected resonse, sleeping", string(bs), w)
+			time.Sleep(5 * time.Second)
+		}
+		res.Body.Close()
+
 	}
 }
 
@@ -517,6 +538,17 @@ func (w *WechatClient) getBaseRequest() *BaseRequest {
 		Skey:     w.Credential.Skey,
 		DeviceID: w.DeviceID,
 	}
+}
+
+func getSelector(s []byte) (rv struct{ retcode, selector string }, err error) {
+	m1 := RetcodeMatcher.FindSubmatch(s)
+	m2 := SelectorMatcher.FindSubmatch(s)
+	if len(m1) != 2 || len(m2) != 2 {
+		return rv, errors.New("Invalid SyncCheckREsult")
+	}
+	rv.retcode = string(m1[1])
+	rv.selector = string(m2[1])
+	return
 }
 
 func getR() string {
