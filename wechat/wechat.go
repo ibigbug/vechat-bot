@@ -19,6 +19,9 @@ import (
 
 	"errors"
 
+	"log"
+
+	"github.com/go-pg/pg"
 	"github.com/ibigbug/vechat-bot/models"
 	"github.com/ibigbug/vechat-bot/queue"
 	"golang.org/x/net/publicsuffix"
@@ -45,11 +48,12 @@ var (
 	RetcodeMatcher     = regexp.MustCompile("retcode:\"(\\d+)\"")
 	SelectorMatcher    = regexp.MustCompile("selector:\"(\\d+)\"")
 
-	NilCredential WechatCredential
-
 	CheckLoginTimeout = errors.New("Wechat CheckLogin Timeout")
 	NoSuchClient      = errors.New("No such wechat client")
 	SendMsgError      = errors.New("Send message error")
+	UpdateColumns     = []string{
+		"cookies", "pass_ticket", "sid", "skey", "uin", "device_id", "username", "status", "sync_key", "updated",
+	}
 )
 
 var botCenter = struct {
@@ -59,7 +63,7 @@ var botCenter = struct {
 	bots: make(map[string]*WechatClient),
 }
 
-func NewWechatClient(tgBotName, accountId string) *WechatClient {
+func New(tgBotName, accountId string) *WechatClient {
 	botCenter.Lock()
 	defer botCenter.Unlock()
 
@@ -117,6 +121,34 @@ func GetByTelegramBot(tgBot string) (*WechatClient, error) {
 	return nil, NoSuchClient
 }
 
+func FromCredential(credential *models.WechatCredential) *WechatClient {
+	var bot = New(credential.TelegramBot, credential.AccountId)
+	bot.DeviceID = credential.DeviceID
+	bot.Credential = Credential{
+		PassTicket: credential.PassTicket,
+		Sid:        credential.Sid,
+		Skey:       credential.Skey,
+		Uin:        credential.Uin,
+		SyncKey:    buildSyncKey(credential.SyncKey),
+	}
+
+	jar, _ := cookiejar.New(&cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	})
+	var cookies = make([]*http.Cookie, len(credential.Cookies))
+	for key, val := range credential.Cookies {
+		cookies = append(cookies, &http.Cookie{
+			Name:  key,
+			Value: val,
+			Path:  "/",
+		})
+	}
+	var u, _ = url.Parse(BaseCookieURL)
+	jar.SetCookies(u, cookies[len(cookies)-len(credential.Cookies):])
+	bot.Client.Jar = jar
+	return bot
+}
+
 // Login Steps
 // 1. generate uuid
 // 2. check login
@@ -130,8 +162,8 @@ type WechatClient struct {
 	NickName    string
 	UserName    string
 	DeviceID    string
-	Credential  WechatCredential
-	ContactList []*WechatFriend
+	Credential  Credential
+	ContactList []*Friend
 
 	AccountId string
 	// unique telegram bot name
@@ -239,6 +271,7 @@ func (w *WechatClient) setCredential(logonRes *LogonResponse) {
 }
 
 func (w *WechatClient) SaveCredential() {
+	var exist = models.WechatCredential{}
 	var credential = models.WechatCredential{
 		AccountId: w.AccountId,
 	}
@@ -248,33 +281,32 @@ func (w *WechatClient) SaveCredential() {
 	for _, cookie := range w.Client.Jar.Cookies(u) {
 		cookies[cookie.Name] = cookie.Value
 	}
+	credential.Cookies = cookies
+	credential.PassTicket = w.Credential.PassTicket
+	credential.Sid = w.Credential.Sid
+	credential.Skey = w.Credential.Skey
+	credential.Uin = w.Credential.Uin
+	credential.DeviceID = w.DeviceID
+	credential.Username = w.UserName
+	credential.TelegramBot = w.TelegramBot
+	credential.Status = 1
+	credential.SyncKey = w.Credential.SyncKey.GetValue()
+	credential.Updated = time.Now().UTC()
 
-	if _, err := models.Engine.Model(&credential).
-		Where("account_id = ?account_id").
-		Set("pass_ticket = ?", w.Credential.PassTicket).
-		Set("sid = ?", w.Credential.Sid).
-		Set("skey = ?", w.Credential.Skey).
-		Set("username = ?", w.UserName).
-		Set("telegram_bot = ?", w.TelegramBot).
-		Set("status = ?", 1).
-		Set("sync_key = ?", w.Credential.SyncKey.GetValue()).
-		Set("cookies = ?", cookies).
-		Set("updated = ?", time.Now().UTC()).SelectOrInsert(); err != nil {
-		logger.Println("Error saving creadentials for wechat:", w.NickName, err)
-
-	} else {
-		credential.PassTicket = w.Credential.PassTicket
-		credential.Sid = w.Credential.Sid
-		credential.Skey = w.Credential.Skey
-		credential.Username = w.UserName
-		credential.TelegramBot = w.TelegramBot
-		credential.Status = 1
-		credential.SyncKey = w.Credential.SyncKey.GetValue()
-		credential.Cookies = cookies
-		credential.Updated = time.Now().UTC()
-		if err := models.Engine.Update(&credential); err != nil {
-			logger.Println("Error update existed credential for wechat: ", w.NickName, err)
+	if err := models.Engine.Model(&exist).Where("account_id = ?", credential.AccountId).Select(); err == pg.ErrNoRows {
+		if rv, err := models.Engine.Model(&credential).Insert(); err != nil {
+			logger.Println("Error update/insert credential for wechat: ", w.NickName, err, rv)
+		} else {
+			logger.Println("credential inserted", w)
 		}
+	} else if err == nil {
+		if _, err := models.Engine.Model(&credential).Where("account_id = ?", w.AccountId).Column(UpdateColumns...).Update(); err == nil {
+			logger.Println("credential updated", w)
+		} else {
+			logger.Println("Error updating credential", w, err)
+		}
+	} else {
+		log.Println("Save credential failed", err, w)
 	}
 }
 
@@ -343,7 +375,7 @@ func (w *WechatClient) getContactList() {
 	var response struct {
 		BaseResponse BaseResponse
 		MemberCount  int
-		MemberList   []*WechatFriend
+		MemberList   []*Friend
 	}
 	if err := json.NewDecoder(res.Body).Decode(&response); err == nil {
 		logger.Printf("Got %d contacts\n", response.MemberCount)
@@ -362,7 +394,7 @@ func (w *WechatClient) CancelSynCheck() {
 }
 
 func (w *WechatClient) StartSyncCheck() {
-	logger.Println("Polling new msg for wechat client:", w)
+	logger.Println("ping", w)
 
 	u, _ := url.Parse(SyncCheckURL)
 	q := u.Query()
@@ -375,6 +407,7 @@ func (w *WechatClient) StartSyncCheck() {
 
 	for {
 		q.Set("synckey", strings.Join(w.Credential.SyncKey.GetValue(), "|"))
+		fmt.Println(q.Encode())
 		u.RawQuery = q.Encode()
 		req, _ := http.NewRequest("GET", u.String(), nil)
 		res, err := w.Client.Do(req.WithContext(w.ctx))
@@ -594,4 +627,23 @@ func GetUUID() ([]byte, error) {
 	defer req.Body.Close()
 	txt, _ := ioutil.ReadAll(req.Body)
 	return UUIDMatcher.FindSubmatch(txt)[1], nil
+}
+
+func buildSyncKey(sk []string) SyncKey {
+	var rv = SyncKey{
+		Count: len(sk),
+		List:  make([]struct{ Key, Val int }, len(sk)),
+	}
+	for i, k := range sk {
+		parts := strings.Split(k, "_")
+		key, _ := strconv.Atoi(parts[0])
+		val, _ := strconv.Atoi(parts[1])
+		rv.List[i] = struct {
+			Key, Val int
+		}{
+			Key: key,
+			Val: val,
+		}
+	}
+	return rv
 }

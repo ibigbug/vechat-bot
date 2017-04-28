@@ -126,7 +126,7 @@ func (t *TelegramBot) GetUpdates() {
 
 	for {
 		req, _ := http.NewRequest("GET", u.String(), nil)
-		logger.Printf("Polling new msg for telegram bot: %s\n", t)
+		logger.Printf("ping %s\n", t)
 		if res, err := t.client.Do(req.WithContext(t.ctx)); err != nil {
 			if uerr, ok := err.(*url.Error); ok {
 				if uerr.Temporary() || uerr.Timeout() {

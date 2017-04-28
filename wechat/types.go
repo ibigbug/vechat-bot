@@ -29,7 +29,7 @@ func (s SyncKey) GetValue() []string {
 	return syncKey[len(syncKey)-s.Count:]
 }
 
-type WechatCredential struct {
+type Credential struct {
 	PassTicket string
 	Sid        string
 	Skey       string
@@ -67,7 +67,7 @@ type BaseResponse struct {
 	Ret    int
 }
 
-type WechatFriend struct {
+type Friend struct {
 	Alias            string
 	AppAccountFlag   int
 	AttrStatus       int
@@ -81,7 +81,7 @@ type WechatFriend struct {
 	IsOwner          int
 	KeyWord          string
 	MemberCount      int
-	MemberList       []*WechatFriend
+	MemberList       []*Friend
 	NickName         string
 	OwnerUid         int
 	PYInitial        string
@@ -128,7 +128,7 @@ type InitResponse struct {
 	ChatSet             string
 	ClickReportInterval int
 	ClientVersion       int
-	ContactList         []*WechatFriend
+	ContactList         []*Friend
 	Count               int
 	GrayScale           int
 	InviteStartCount    int
