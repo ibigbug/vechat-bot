@@ -407,7 +407,6 @@ func (w *WechatClient) StartSyncCheck() {
 
 	for {
 		q.Set("synckey", strings.Join(w.Credential.SyncKey.GetValue(), "|"))
-		fmt.Println(q.Encode())
 		u.RawQuery = q.Encode()
 		req, _ := http.NewRequest("GET", u.String(), nil)
 		res, err := w.Client.Do(req.WithContext(w.ctx))
