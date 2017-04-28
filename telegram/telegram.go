@@ -15,6 +15,8 @@ import (
 
 	"io/ioutil"
 
+	"log"
+
 	"github.com/ibigbug/vechat-bot/models"
 	"github.com/ibigbug/vechat-bot/queue"
 )
@@ -108,8 +110,11 @@ func (t *TelegramBot) GetMe() (user User, err error) {
 }
 
 func (t *TelegramBot) SetDisable() {
-	models.Engine.Model(&models.TelegramBot{}).Where("name = ?", t.Name).Set("status = ?", 0).Update()
-	logger.Println("Setting bot", t, "status to 0")
+	if _, err := models.Engine.Model(&models.TelegramBot{}).Where("name = ?", t.Name).Set("status = ?", 0).Update(); err == nil {
+		logger.Println("Setting bot", t, "status to 0")
+	} else {
+		log.Println("Error setting bot", t, "to disable")
+	}
 }
 
 func (t *TelegramBot) GetUpdates() {
