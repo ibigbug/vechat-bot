@@ -401,6 +401,7 @@ func (w *WechatClient) StartSyncCheck() {
 		}
 
 		bs, _ := ioutil.ReadAll(res.Body)
+		logger.Println("Syncecheck result", string(bs), w)
 		selector, err := getSelector(bs)
 		if err != nil {
 			logger.Println("Error get synccheck result", err, w)
@@ -416,11 +417,11 @@ func (w *WechatClient) StartSyncCheck() {
 			logger.Println("Got wechat new message", w)
 			w.getNewMessage()
 		case SelectorNothing:
-			logger.Println("Found nothing, still polling", w, string(bs))
+			logger.Println("Found nothing, still polling", w)
 			res.Body.Close()
 			continue
 		default:
-			logger.Println("Unexpected resonse, sleeping", string(bs), w)
+			logger.Println("Unexpected resonse, sleeping", w)
 			time.Sleep(5 * time.Second)
 		}
 		res.Body.Close()
