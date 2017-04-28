@@ -103,6 +103,10 @@ func (t *TelegramBot) GetMe() (user User, err error) {
 	return response.Result, err
 }
 
+func (t *TelegramBot) SetDisable() {
+	models.Engine.Model(&models.TelegramBot{}).Where("name = ?", t.Name).Set("status = ?", 0).Update()
+}
+
 func (t *TelegramBot) GetUpdates() {
 	u, _ := url.Parse(TelegramAPIEndpoint)
 	u.Path += fmt.Sprintf("/bot%s/getUpdates", t.Token)
@@ -139,6 +143,7 @@ func (t *TelegramBot) GetUpdates() {
 				if update.ErrorCode == 409 {
 					logger.Println("Error polling for bot", t.Name, "error", update.Description, "Terminating...")
 					break
+					w.SetDisable()
 				}
 			}
 			for _, up := range update.Result {
