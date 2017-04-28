@@ -208,6 +208,9 @@ func (t *TelegramBot) SendMessage(msg SendMessage) (*Message, error) {
 	}
 	defer res.Body.Close()
 	bs, _ := ioutil.ReadAll(res.Body)
+	if res.StatusCode >= 300 {
+		return nil, errors.New(res.Status + ", error " + string(bs))
+	}
 	var rv SendMessageResponse
 	json.Unmarshal(bs, &rv)
 	return rv.Result, nil
