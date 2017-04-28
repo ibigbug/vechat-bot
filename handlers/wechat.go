@@ -53,7 +53,8 @@ func QRCodeHandler(w http.ResponseWriter, r *http.Request) {
 				wxClient.SaveCredential()
 				wxClient.RegisterToCenter()
 				wxClient.StartSyncCheck()
-				log.Println("Polling exited.. sth wrong might happend...")
+				log.Println("Polling exited.. destroying...")
+				wxClient.Destroy()
 			}()
 		}
 	} else {

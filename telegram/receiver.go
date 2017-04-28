@@ -37,7 +37,7 @@ func (c *Consumer) Start() {
 						Text: msg.FromUser + ": " + msg.Content,
 					})
 					if err != nil || rv == nil {
-						logger.Println("Error sending msg", msg, "need retry")
+						logger.Println("Error sending msg", msg, "need retry", err)
 						continue
 					}
 					var record models.Message

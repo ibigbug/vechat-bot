@@ -34,13 +34,21 @@
     <button>Submit</button>
   </form>
   <dl>
+    {{ $links := .links }}
     {{ range .tgbots }}
       <dt>{{ .Name }}</dt>
       <dd>- status: {{ .Status }}</dd>
       <dd>
         - action:
           <form action="/telegram/toggle?id={{ .Id }}" method="POST"><button>toggle</button></form>
-          <a href="/wechat?bot={{ .Id }}"><button>link to wechat</button></a>
+      </dd>
+      <dd>
+        - link:
+          {{ if eq  (index $links .Name) ""}}
+            <a href="/wechat?bot={{ .Id }}"><button>link to wechat</button></a>
+          {{ else }}
+            Already linked to: {{ index $links .Name }}, logout on your phone
+          {{ end }}
       </dd>
   {{ else }}
     Get a new bot from @BotFather on Telegram.

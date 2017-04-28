@@ -8,6 +8,7 @@ import (
 
 	"github.com/ibigbug/vechat-bot/middlewares"
 	"github.com/ibigbug/vechat-bot/models"
+	"github.com/ibigbug/vechat-bot/wechat"
 )
 
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
@@ -27,6 +28,14 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 		var tgBots []models.TelegramBot
 		models.Engine.Model(&tgBots).Where("account_id = ?", user.(models.GoogleAccount).Sub).Select()
 		locals["tgbots"] = tgBots
+
+		var links = make(map[string]string)
+		for _, b := range tgBots {
+			if wx, err := wechat.GetByTelegramBot(b.Name); err == nil {
+				links[b.Name] = wx.NickName
+			}
+		}
+		locals["links"] = links
 	}
 	w.Header().Set("Content-Type", "text/html")
 	t.Execute(w, locals)
