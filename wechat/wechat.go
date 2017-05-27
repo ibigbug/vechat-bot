@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net/http"
 	"net/http/cookiejar"
@@ -17,10 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"errors"
-
-	"log"
-
+	raven "github.com/getsentry/raven-go"
 	"github.com/go-pg/pg"
 	"github.com/ibigbug/vechat-bot/models"
 	"github.com/ibigbug/vechat-bot/queue"
@@ -40,6 +39,10 @@ const (
 	RetCodeOK          = "0"
 	SelectorNewMessage = "2"
 	SelectorNothing    = "0"
+)
+
+const (
+	maxRetryTimes = 10
 )
 
 var (
@@ -93,6 +96,8 @@ func New(tgBotName, accountId string) *WechatClient {
 
 		ctx:        ctx,
 		cancelFunc: cancel,
+
+		retryTimes: 0,
 	}
 
 	return cli
@@ -171,6 +176,8 @@ type WechatClient struct {
 
 	ctx        context.Context
 	cancelFunc context.CancelFunc
+
+	retryTimes int
 }
 
 func (w *WechatClient) String() string {
@@ -422,9 +429,20 @@ func (w *WechatClient) StartSyncCheck() {
 					w.Destroy()
 					return
 				} else {
-					logger.Printf("Error unrecoverable %s\n", uerr.Error())
-					w.Destroy()
-					return
+					if w.retryTimes >= maxRetryTimes {
+						logger.Printf("Error unrecoverable and maxRetryTimes exceeded %s\n", uerr.Error())
+						raven.CaptureError(uerr, map[string]string{
+							"NickName":  w.NickName,
+							"AccountID": w.AccountId,
+						})
+						w.Destroy()
+						return
+					} else {
+						w.retryTimes += 1
+						time.Sleep(5 * time.Second)
+						logger.Printf("Error occured, retrying, retry times: %d, err: %s", w.retryTimes, uerr.Error())
+						continue
+					}
 				}
 			} else {
 				logger.Printf("error syncing for account %s， err: %s\n", w, err)
