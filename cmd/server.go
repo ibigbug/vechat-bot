@@ -53,5 +53,6 @@ func runServer(addr string) {
 		Addr:    addr,
 		Handler: mux,
 	}
+
 	srv.ListenAndServe()
 }

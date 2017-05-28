@@ -22,4 +22,7 @@ var (
 	DatabaseName = Env("DATABASE_NAME", "vechat-sync-dev")
 
 	SentryDSN = Env("SENTRY_DSN", "")
+
+	SurviveTelegramBots = Env("SURVIVE_TELEGRAM_BOTS", "false")
+	SurviveWechatBots   = Env("SURVIVE_WECHAT_BOTS", "false")
 )
