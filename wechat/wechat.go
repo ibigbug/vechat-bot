@@ -36,6 +36,9 @@ const (
 	WebWXGetContactURL = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxgetcontact"
 	WebWXSendMsgURL    = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxsendmsg"
 
+	UserAgent       = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
+	ApplicationJson = "application/json"
+
 	RetCodeOK          = "0"
 	SelectorNewMessage = "2"
 	SelectorNothing    = "0"
@@ -233,7 +236,9 @@ func (w *WechatClient) CheckLogin(uuid []byte) error {
 					redirectURI := string(getRedirectURI(bs))
 					logger.Println("Found redirect_uri", redirectURI)
 					// login & pour cookiejar
-					res, err := w.Client.Get(redirectURI)
+					req, err := http.NewRequest("GET", redirectURI, nil)
+					req.Header.Set("User-Agent", UserAgent)
+					res, err := w.Client.Do(req)
 					if err != nil {
 						logger.Printf("error fetching redirectURI %s\n", err)
 						return
@@ -343,7 +348,10 @@ func (w *WechatClient) InitClient() {
 	}
 	var body = new(bytes.Buffer)
 	json.NewEncoder(body).Encode(request)
-	res, err := w.Client.Post(u.String(), "application/json", body)
+	req, err := http.NewRequest("POST", u.String(), body)
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Content-Type", ApplicationJson)
+	res, err := w.Client.Do(req)
 	if err != nil {
 		logger.Printf("Error init client %s\n", err)
 		return
@@ -374,7 +382,9 @@ func (w *WechatClient) getContactList() {
 	q.Set("skey", w.Credential.Skey)
 	u.RawQuery = q.Encode()
 
-	res, err := w.Client.Get(u.String())
+	req, _ := http.NewRequest("GET", u.String(), nil)
+	req.Header.Set("User-Agent", UserAgent)
+	res, err := w.Client.Do(req)
 	if err != nil {
 		logger.Printf("Error get contact list")
 		return
@@ -417,8 +427,8 @@ func (w *WechatClient) StartSyncCheck() {
 		q.Set("synckey", strings.Join(w.Credential.SyncKey.GetValue(), "|"))
 		u.RawQuery = q.Encode()
 		req, _ := http.NewRequest("GET", u.String(), nil)
+		req.Header.Set("User-Agent", UserAgent)
 		res, err := w.Client.Do(req.WithContext(w.ctx))
-		fmt.Println(u, w.Client.Jar.Cookies(u))
 		if err != nil {
 			if uerr, ok := err.(*url.Error); ok {
 				logger.Println(uerr)
@@ -505,7 +515,10 @@ func (w *WechatClient) SendMessage(msg SendMessage) error {
 
 	body := new(bytes.Buffer)
 	json.NewEncoder(body).Encode(reqBody)
-	res, err := w.Client.Post(u.String(), "application/json", body)
+	req, _ := http.NewRequest("POST", u.String(), body)
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Content-Type", ApplicationJson)
+	res, err := w.Client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -543,7 +556,10 @@ func (w *WechatClient) getNewMessage() {
 
 	body := new(bytes.Buffer)
 	json.NewEncoder(body).Encode(reqBody)
-	res, err := w.Client.Post(u.String(), "application/json", body)
+	req, _ := http.NewRequest("POST", u.String(), body)
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Content-Type", ApplicationJson)
+	res, err := w.Client.Do(req)
 	if err != nil {
 		logger.Printf("error get new message %s\n", err)
 		return
