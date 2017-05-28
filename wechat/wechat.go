@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	BaseCookieURL      = "https://wxq.qq.com"
+	BaseCookieURL      = "https://wx2.qq.com"
 	GetUUIDURL         = "https://login.wx2.qq.com/jslogin?appid=wx782c26e4c19acffb&redirect_uri=https%3A%2F%2Fwx.qq.com%2Fcgi-bin%2Fmmwebwx-bin%2Fwebwxnewloginpage&fun=new&lang=en_US&_=1492959953169"
 	CheckLoginURL      = "https://login.wx2.qq.com/cgi-bin/mmwebwx-bin/login"
 	InitURL            = "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxinit"
@@ -79,7 +79,7 @@ func New(tgBotName, accountId string) *WechatClient {
 		Transport: &http.Transport{
 			IdleConnTimeout: 3 * time.Second,
 		},
-		//Timeout: 0,
+		Timeout: 0,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -140,16 +140,17 @@ func FromCredential(credential *models.WechatCredential) *WechatClient {
 	jar, _ := cookiejar.New(&cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,
 	})
-	var cookies = make([]*http.Cookie, len(credential.Cookies))
+	var cookies = make([]*http.Cookie, 0, len(credential.Cookies))
+	var u, _ = url.Parse(BaseCookieURL)
 	for key, val := range credential.Cookies {
 		cookies = append(cookies, &http.Cookie{
-			Name:  key,
-			Value: val,
-			Path:  "/",
+			Name:   key,
+			Value:  val,
+			Path:   "/",
+			Domain: u.Hostname(),
 		})
 	}
-	var u, _ = url.Parse(BaseCookieURL)
-	jar.SetCookies(u, cookies[len(cookies)-len(credential.Cookies):])
+	jar.SetCookies(u, cookies)
 	bot.Client.Jar = jar
 	return bot
 }
@@ -231,7 +232,7 @@ func (w *WechatClient) CheckLogin(uuid []byte) error {
 					// get the redirect uri
 					redirectURI := string(getRedirectURI(bs))
 					logger.Println("Found redirect_uri", redirectURI)
-					// login
+					// login & pour cookiejar
 					res, err := w.Client.Get(redirectURI)
 					if err != nil {
 						logger.Printf("error fetching redirectURI %s\n", err)
@@ -261,7 +262,7 @@ L:
 				logger.Println("Check Login succeeded")
 				break L
 			}
-		case <-time.After(30 * time.Second):
+		case <-time.After(100 * time.Second):
 			logger.Println("login timeout, sending quit signal")
 			close(quitSig)
 			return CheckLoginTimeout
@@ -417,6 +418,7 @@ func (w *WechatClient) StartSyncCheck() {
 		u.RawQuery = q.Encode()
 		req, _ := http.NewRequest("GET", u.String(), nil)
 		res, err := w.Client.Do(req.WithContext(w.ctx))
+		fmt.Println(u, w.Client.Jar.Cookies(u))
 		if err != nil {
 			if uerr, ok := err.(*url.Error); ok {
 				logger.Println(uerr)
@@ -471,7 +473,7 @@ func (w *WechatClient) StartSyncCheck() {
 			res.Body.Close()
 			continue
 		default:
-			logger.Println("Unexpected resonse, sleeping", w)
+			logger.Println("Unexpected response, sleeping", w)
 			time.Sleep(5 * time.Second)
 		}
 		res.Body.Close()

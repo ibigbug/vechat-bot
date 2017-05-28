@@ -2,9 +2,10 @@ package telegram
 
 import (
 	"log"
-
 	"os"
+	"strconv"
 
+	"github.com/ibigbug/vechat-bot/config"
 	"github.com/ibigbug/vechat-bot/models"
 	"github.com/ibigbug/vechat-bot/queue"
 )
@@ -13,18 +14,21 @@ var logger = log.New(os.Stdout, "[telegram]", log.LstdFlags)
 
 func init() {
 
-	logger.Println("Surviving bots")
-	var bots []models.TelegramBot
-	if err := models.Engine.Model(&bots).Where("status = ?", 1).Select(); err == nil {
-		logger.Printf("Got %d bots to survive\n", len(bots))
-		for _, b := range bots {
-			cli := GetBotClient(b.Token, b.Name)
-			cli.ChatId = b.ChatId
-			go cli.GetUpdates()
-			logger.Printf("Surived a bot %s\n", b.Name)
+	survive, err := strconv.ParseBool(config.SurviveTelegramBots)
+	if err == nil && survive {
+		logger.Println("Surviving bots")
+		var bots []models.TelegramBot
+		if err := models.Engine.Model(&bots).Where("status = ?", 1).Select(); err == nil {
+			logger.Printf("Got %d bots to survive\n", len(bots))
+			for _, b := range bots {
+				cli := GetBotClient(b.Token, b.Name)
+				cli.ChatId = b.ChatId
+				go cli.GetUpdates()
+				logger.Printf("Surived a bot %s\n", b.Name)
+			}
+		} else {
+			logger.Printf("error occured while surviving bots: %s\n", err.Error())
 		}
-	} else {
-		logger.Printf("error occured while surviving bots: %s\n", err.Error())
 	}
 
 	var consumer = Consumer{
